@@ -18,6 +18,6 @@
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "commitlint.config.ts"],
   "exclude": ["node_modules", "**/*.spec.ts", "tests"]
 }

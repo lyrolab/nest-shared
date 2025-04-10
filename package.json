@@ -8,11 +8,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "commitlint": {
-    "extends": [
-      "@commitlint/config-conventional"
-    ]
-  },
   "exports": {
     "./ai": {
       "types": "./dist/ai/index.d.ts",
