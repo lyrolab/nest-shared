@@ -38,6 +38,11 @@
       "types": "./dist/redis/index.d.ts",
       "import": "./dist/redis/index.js",
       "require": "./dist/redis/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "import": "./dist/health/index.js",
+      "require": "./dist/health/index.js"
     }
   },
   "scripts": {
