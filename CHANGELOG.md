@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/lyrolab/nest-shared/compare/v1.0.0...v1.0.1) (2025-04-10)
+
+### Bug Fixes
+
+- tsconfig ([f6fe7e2](https://github.com/lyrolab/nest-shared/commit/f6fe7e20ec31a4ec0fdf1ea2521db2c5e5a5925c))
+
 # 1.0.0 (2025-04-10)
 
 ### Bug Fixes
