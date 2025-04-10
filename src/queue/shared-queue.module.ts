@@ -11,4 +11,4 @@ import { QueueController } from "./controllers/queue.controller"
   exports: [QueueService],
   controllers: [QueueController],
 })
-export class QueueModule {}
+export class SharedQueueModule {}

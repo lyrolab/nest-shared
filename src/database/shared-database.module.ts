@@ -100,10 +100,10 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       type: "postgres",
       url: configService.get("DATABASE_URL"),
       entities: options.entities || [
-        join(__dirname, "../../../**/*.entity{.ts,.js}"),
+        join(findMainPath(), "**/*.entity{.ts,.js}"),
       ],
       migrations: options.migrations || [
-        join(__dirname, "../../../migrations/**/*.{ts,js}"),
+        join(findMainPath(), "src/migrations/**/*.{ts,js}"),
       ],
       synchronize: false,
       autoLoadEntities: true,
