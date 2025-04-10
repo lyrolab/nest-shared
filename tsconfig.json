@@ -16,10 +16,8 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strictBindCallApply": true,
-    "noFallthroughCasesInSwitch": true,
-    "paths": {
-      "@app/nest-shared": ["libs/nest-shared/src"],
-      "@app/nest-shared/*": ["libs/nest-shared/src/*"]
-    }
-  }
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "tests"]
 }

@@ -2,6 +2,7 @@ import { DynamicModule, Module, OnModuleDestroy } from "@nestjs/common"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { TypeOrmModule, TypeOrmModuleOptions } from "@nestjs/typeorm"
 import { join } from "path"
+import { findMainPath } from "./helpers/find-main-path"
 import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
 import { DataSource } from "typeorm"
 
@@ -63,11 +64,11 @@ export class SharedDatabaseModule implements OnModuleDestroy {
     )}/test`
 
     const entities = options.entities || [
-      join(__dirname, "../../../**/*.entity{.ts,.js}"),
+      join(findMainPath(), "**/*.entity{.ts,.js}"),
     ]
 
     const migrations = options.migrations || [
-      join(__dirname, "../../../migrations/**/*.{ts,js}"),
+      join(findMainPath(), "src/migrations/**/*.{ts,js}"),
     ]
 
     if (!this.testDataSource) {

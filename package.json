@@ -1,6 +1,6 @@
 {
   "name": "@lyrolab/nest-shared",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "",
   "author": "",
   "license": "UNLICENSED",
@@ -9,32 +9,50 @@
       "@commitlint/config-conventional"
     ]
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "exports": {
+    "./ai": {
+      "types": "./dist/ai/index.d.ts",
+      "import": "./dist/ai/index.js",
+      "require": "./dist/ai/index.js"
+    },
+    "./bull": {
+      "types": "./dist/bull/index.d.ts",
+      "import": "./dist/bull/index.js",
+      "require": "./dist/bull/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "import": "./dist/cache/index.js",
+      "require": "./dist/cache/index.js"
+    },
+    "./database": {
+      "types": "./dist/database/index.d.ts",
+      "import": "./dist/database/index.js",
+      "require": "./dist/database/index.js"
+    },
+    "./queue": {
+      "types": "./dist/queue/index.d.ts",
+      "import": "./dist/queue/index.js",
+      "require": "./dist/queue/index.js"
+    },
+    "./redis": {
+      "types": "./dist/redis/index.d.ts",
+      "import": "./dist/redis/index.js",
+      "require": "./dist/redis/index.js"
+    }
+  },
   "scripts": {
     "prebuild": "rimraf dist",
-    "build": "tsc -p tsconfig.build.json",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"libs/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint 'src/**/*.ts' --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
     "prepare": "husky && npm run build",
     "lint-staged": "npx lint-staged"
   },
-  "dependencies": {
-    "@nestjs/common": "^11.0.1",
-    "@nestjs/platform-express": "^11.0.1",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
-  },
   "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
     "@nestjs/bullmq": "^11.0.0",
     "@nestjs/cache-manager": "^3.0.0",
     "@nestjs/config": "^4.0.0",
@@ -45,6 +63,7 @@
     "cache-manager": "^6.0.0",
     "class-validator": "^0.14.0",
     "testcontainers": "^10.0.0",
+    "rxjs": "^7.8.1",
     "typeorm": "^0.3.22"
   },
   "devDependencies": {
@@ -56,8 +75,10 @@
     "@nestjs/bullmq": "^11.0.2",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/cli": "^11.0.0",
+    "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.13",
+    "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@nestjs/typeorm": "^11.0.0",
@@ -72,14 +93,16 @@
     "bullmq": "^5.46.1",
     "cache-manager": "^6.4.1",
     "class-validator": "^0.14.1",
-    "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
+    "eslint": "^9.18.0",
     "globals": "^16.0.0",
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
+    "reflect-metadata": "^0.2.2",
     "rimraf": "^6.0.1",
+    "rxjs": "^7.8.1",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "testcontainers": "^10.24.0",
@@ -88,8 +111,8 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typeorm": "^0.3.22",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
+    "typescript-eslint": "^8.20.0",
+    "typescript": "^5.7.3"
   },
   "jest": {
     "moduleFileExtensions": [
