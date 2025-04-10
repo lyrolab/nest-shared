@@ -5,4 +5,4 @@ import { AiService } from "./services/ai.service"
   providers: [AiService],
   exports: [AiService],
 })
-export class AiModule {}
+export class SharedAiModule {}
