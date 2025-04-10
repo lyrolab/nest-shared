@@ -1,6 +1,6 @@
 {
   "name": "@lyrolab/nest-shared",
-  "version": "1.0.1",
+  "version": "0.0.0-semantically-released",
   "description": "A collection of shared modules for NestJS applications",
   "author": "",
   "license": "UNLICENSED",
@@ -141,6 +141,11 @@
     "moduleNameMapper": {
       "^@app/nest-shared(|/.*)$": "<rootDir>/libs/nest-shared/src/$1"
     }
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
   },
   "lint-staged": {
     "*.{js,ts,json,css,scss,md}": [
