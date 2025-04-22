@@ -3,17 +3,31 @@ import { DiscoveryService } from "@nestjs/core"
 import { Job, Queue } from "bullmq"
 import { JobProcessorInterface } from "src/queue/models/job-processor-interface"
 import { JobProcessor } from "../decorators/queue.decorator"
-import { DEFAULT_QUEUE } from "../queue.constants"
-import { OnModuleInit, Injectable } from "@nestjs/common"
+import { DEFAULT_QUEUE, QUEUE_MODULE_OPTIONS } from "../queue.constants"
+import {
+  OnModuleInit,
+  Injectable,
+  Inject,
+  Optional,
+  SetMetadata,
+} from "@nestjs/common"
+import { QueueModuleOptions } from "../interfaces/queue-options.interface"
 
 @Injectable()
-@Processor(DEFAULT_QUEUE, { concurrency: 100 })
+@Processor(DEFAULT_QUEUE)
 export class QueueProcessor extends WorkerHost implements OnModuleInit {
   constructor(
     private readonly discoveryService: DiscoveryService,
     @InjectQueue(DEFAULT_QUEUE) private readonly queue: Queue,
+    @Optional()
+    @Inject(QUEUE_MODULE_OPTIONS)
+    private readonly options?: QueueModuleOptions,
   ) {
     super()
+
+    if (this.options?.concurrency) {
+      SetMetadata("bullmq:worker_metadata", this.options)(QueueProcessor)
+    }
   }
 
   async onModuleInit() {
