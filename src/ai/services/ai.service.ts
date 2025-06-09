@@ -11,6 +11,12 @@ import {
 } from "ai"
 import { Cache } from "cache-manager"
 
+const DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+
+export type BuildModelOptions = {
+  model?: string
+}
+
 @Injectable()
 export class AiService {
   private readonly openrouter: OpenRouterProvider
@@ -20,14 +26,18 @@ export class AiService {
     this.openrouter = createOpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY,
     })
-    this.openrouterChat = wrapLanguageModel({
-      model: this.openrouter.chat("google/gemini-2.0-flash-001"),
-      middleware: [{ wrapGenerate: (options) => this.wrapGenerate(options) }],
-    })
+    this.openrouterChat = this.buildModel()
   }
 
   get model() {
     return this.openrouterChat
+  }
+
+  buildModel({ model }: BuildModelOptions = {}) {
+    return wrapLanguageModel({
+      model: this.openrouter.chat(model ?? DEFAULT_MODEL),
+      middleware: [{ wrapGenerate: (options) => this.wrapGenerate(options) }],
+    })
   }
 
   private async wrapGenerate({
