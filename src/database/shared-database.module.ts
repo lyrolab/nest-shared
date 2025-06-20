@@ -6,6 +6,9 @@ import { findMainPath } from "./helpers/find-main-path"
 import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
 import { DataSource } from "typeorm"
 
+const ENTITIES_PATH = "dist/**/*.entity{.ts,.js}"
+const MIGRATIONS_PATH = "dist/migrations/**/*.{ts,js}"
+
 type SharedDatabaseModuleOptions = {
   entities?: string[]
   migrations?: string[]
@@ -63,12 +66,9 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       5432,
     )}/test`
 
-    const entities = options.entities || [
-      join(findMainPath(), "**/*.entity{.ts,.js}"),
-    ]
-
+    const entities = options.entities || [join(findMainPath(), ENTITIES_PATH)]
     const migrations = options.migrations || [
-      join(findMainPath(), "src/migrations/**/*.{ts,js}"),
+      join(findMainPath(), MIGRATIONS_PATH),
     ]
 
     if (!this.testDataSource) {
@@ -100,10 +100,10 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       type: "postgres",
       url: configService.get("DATABASE_URL"),
       entities: options.entities || [
-        join(findMainPath(), "**/*.entity{.ts,.js}"),
+        join(findMainPath(), "dist/**/*.entity{.ts,.js}"),
       ],
       migrations: options.migrations || [
-        join(findMainPath(), "src/migrations/**/*.{ts,js}"),
+        join(findMainPath(), "dist/migrations/**/*.{ts,js}"),
       ],
       synchronize: false,
       autoLoadEntities: true,

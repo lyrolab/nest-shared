@@ -43,3 +43,12 @@ export class AppModule {}
 ```
 
 For detailed documentation and configuration options for each module, please refer to their respective README files.
+
+## Standard Environment Variables
+
+The following environment variables are commonly used across projects utilizing this package:
+
+- `PORT`: Port on which the backend application will run.
+- `FRONTEND_URL`: URL of the frontend application, used for CORS configuration.
+- `DATABASE_URL`: Connection URL for the PostgreSQL database.
+- `REDIS_URL`: Connection URL for the Redis database.
