@@ -34,8 +34,12 @@ export class AiService {
   }
 
   buildModel({ model }: BuildModelOptions = {}) {
+    return this.wrapModel(this.openrouter.chat(model ?? DEFAULT_MODEL))
+  }
+
+  wrapModel(model: LanguageModelV1) {
     return wrapLanguageModel({
-      model: this.openrouter.chat(model ?? DEFAULT_MODEL),
+      model,
       middleware: [{ wrapGenerate: (options) => this.wrapGenerate(options) }],
     })
   }
