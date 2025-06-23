@@ -6,7 +6,9 @@ import { findMainPath } from "./helpers/find-main-path"
 import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
 import { DataSource } from "typeorm"
 
-const ENTITIES_PATH = "dist/**/*.entity{.ts,.js}"
+const isJest = () => process.env.JEST_WORKER_ID !== undefined
+
+const ENTITIES_PATH = "**/*.entity.{ts,js}"
 const MIGRATIONS_PATH = "dist/migrations/**/*.{ts,js}"
 
 type SharedDatabaseModuleOptions = {
@@ -66,7 +68,9 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       5432,
     )}/test`
 
-    const entities = options.entities || [join(findMainPath(), ENTITIES_PATH)]
+    const entities = options.entities || [
+      join(findMainPath(), isJest() ? "" : "dist", ENTITIES_PATH),
+    ]
     const migrations = options.migrations || [
       join(findMainPath(), MIGRATIONS_PATH),
     ]
@@ -100,11 +104,9 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       type: "postgres",
       url: configService.get("DATABASE_URL"),
       entities: options.entities || [
-        join(findMainPath(), "dist/**/*.entity{.ts,.js}"),
+        join(findMainPath(), isJest() ? "" : "dist", ENTITIES_PATH),
       ],
-      migrations: options.migrations || [
-        join(findMainPath(), "dist/migrations/**/*.{ts,js}"),
-      ],
+      migrations: options.migrations || [join(findMainPath(), MIGRATIONS_PATH)],
       synchronize: false,
       autoLoadEntities: true,
     }
