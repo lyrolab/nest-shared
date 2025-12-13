@@ -62,6 +62,7 @@
     "release": "semantic-release"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "@nestjs/bullmq": "^11.0.0",
     "@nestjs/cache-manager": "^3.0.0",
     "@nestjs/common": "^11.0.0",
@@ -70,14 +71,14 @@
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/typeorm": "^11.0.0",
     "@openrouter/ai-sdk-provider": "^1.2.0",
-    "@ai-sdk/provider": "^2.0.0",
-    "ai": "^5.0.47",
+    "ai": "^5.0.113",
     "bullmq": "^5.0.0",
     "cache-manager": "^6.0.0",
     "class-validator": "^0.14.0",
     "rxjs": "^7.8.1",
     "testcontainers": "^10.0.0",
-    "typeorm": "^0.3.22"
+    "typeorm": "^0.3.22",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^2.0.0",
@@ -108,7 +109,7 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
-    "ai": "^5.0.47",
+    "ai": "^5.0.113",
     "bullmq": "^5.46.1",
     "cache-manager": "^6.4.1",
     "class-validator": "^0.14.1",
