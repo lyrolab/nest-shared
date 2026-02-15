@@ -4,6 +4,10 @@
   "description": "A collection of shared modules for NestJS applications",
   "author": "",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lyrolab/nest-shared"
+  },
   "private": false,
   "publishConfig": {
     "access": "public"
