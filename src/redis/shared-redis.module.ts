@@ -1,28 +1,17 @@
-import { DynamicModule, Module, OnModuleDestroy } from "@nestjs/common"
+import { DynamicModule, Module } from "@nestjs/common"
 import { ConfigModule, ConfigService } from "@nestjs/config"
-import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
 import { RedisConfig } from "./redis.config"
 
 @Module({})
-export class SharedRedisModule implements OnModuleDestroy {
-  private static testContainer: StartedTestContainer | null = null
-
+export class SharedRedisModule {
   static forRoot(): DynamicModule {
     return {
       module: SharedRedisModule,
       providers: [
         {
           provide: RedisConfig,
-          useFactory: async (configService: ConfigService) => {
-            const isTestEnvironment = process.env.NODE_ENV === "test"
-
-            if (isTestEnvironment) {
-              return new RedisConfig(await this.createTestConfiguration())
-            }
-
-            return new RedisConfig(
-              this.createProductionConfiguration(configService),
-            )
+          useFactory: (configService: ConfigService) => {
+            return new RedisConfig(configService.get("REDIS_URL") as string)
           },
           inject: [ConfigService],
         },
@@ -33,34 +22,24 @@ export class SharedRedisModule implements OnModuleDestroy {
     }
   }
 
-  private static async createTestConfiguration() {
-    if (!this.testContainer) {
-      this.testContainer = await new GenericContainer("redis")
-        .withExposedPorts(6379)
-        .withWaitStrategy(
-          Wait.forAll([
-            Wait.forListeningPorts(),
-            Wait.forLogMessage("Ready to accept connections tcp"),
-          ]),
-        )
-        .start()
+  static forTest(): DynamicModule {
+    const redisUrl = process.env.REDIS_URL
+    if (!redisUrl) {
+      throw new Error(
+        "REDIS_URL environment variable is required for test setup",
+      )
     }
 
-    return `redis://${this.testContainer.getHost()}:${this.testContainer.getMappedPort(6379)}`
-  }
-
-  private static createProductionConfiguration(configService: ConfigService) {
-    return configService.get("REDIS_URL") as string
-  }
-
-  static async closeTestConnection(): Promise<void> {
-    if (this.testContainer) {
-      await this.testContainer.stop()
-      this.testContainer = null
+    return {
+      module: SharedRedisModule,
+      providers: [
+        {
+          provide: RedisConfig,
+          useValue: new RedisConfig(redisUrl),
+        },
+      ],
+      exports: [RedisConfig],
+      global: true,
     }
-  }
-
-  async onModuleDestroy() {
-    await SharedRedisModule.closeTestConnection()
   }
 }

@@ -1,25 +1,28 @@
-import { DynamicModule, Module, OnModuleDestroy } from "@nestjs/common"
+import { DynamicModule, Module } from "@nestjs/common"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { TypeOrmModule, TypeOrmModuleOptions } from "@nestjs/typeorm"
 import { join } from "path"
 import { findMainPath } from "./helpers/find-main-path"
-import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
 import { DataSource } from "typeorm"
-
-const isJest = () => process.env.JEST_WORKER_ID !== undefined
 
 const ENTITIES_PATH = "**/*.entity.{ts,js}"
 const MIGRATIONS_PATH = "dist/migrations/**/*.{ts,js}"
+
+type EntityClass = new (...args: any[]) => any
 
 type SharedDatabaseModuleOptions = {
   entities?: string[]
   migrations?: string[]
 }
 
+type ForTestOptions = {
+  entities: EntityClass[]
+}
+
 @Module({})
-export class SharedDatabaseModule implements OnModuleDestroy {
-  private static testContainer: StartedTestContainer
+export class SharedDatabaseModule {
   private static testDataSource: DataSource
+  private static testEntities: EntityClass[]
 
   static forRoot(options: SharedDatabaseModuleOptions = {}): DynamicModule {
     return {
@@ -28,13 +31,7 @@ export class SharedDatabaseModule implements OnModuleDestroy {
         TypeOrmModule.forRootAsync({
           imports: [ConfigModule],
           inject: [ConfigService],
-          useFactory: async (configService: ConfigService) => {
-            const isTestEnvironment = process.env.NODE_ENV === "test"
-
-            if (isTestEnvironment) {
-              return await this.createTestConfiguration(options)
-            }
-
+          useFactory: (configService: ConfigService) => {
             return this.createProductionConfiguration(configService, options)
           },
         }),
@@ -43,57 +40,102 @@ export class SharedDatabaseModule implements OnModuleDestroy {
     }
   }
 
-  private static async createTestConfiguration(
-    options: SharedDatabaseModuleOptions,
-  ): Promise<TypeOrmModuleOptions> {
-    if (!this.testContainer) {
-      this.testContainer = await new GenericContainer("postgres")
-        .withExposedPorts(5432)
-        .withEnvironment({
-          POSTGRES_PASSWORD: "secret",
-          POSTGRES_DB: "test",
-        })
-        .withWaitStrategy(
-          Wait.forAll([
-            Wait.forListeningPorts(),
-            Wait.forLogMessage(
-              "database system is ready to accept connections",
-            ),
-          ]),
-        )
-        .start()
-    }
-
-    const connectionUri = `postgres://postgres:secret@localhost:${this.testContainer.getMappedPort(
-      5432,
-    )}/test`
-
-    const entities = options.entities || [
-      join(findMainPath(), isJest() ? "" : "dist", ENTITIES_PATH),
-    ]
-    const migrations = options.migrations || [
-      join(findMainPath(), MIGRATIONS_PATH),
-    ]
-
-    if (!this.testDataSource) {
-      this.testDataSource = new DataSource({
-        type: "postgres",
-        url: connectionUri,
-        entities,
-        synchronize: true,
-        migrations,
-      })
-
-      await this.testDataSource.initialize()
-    }
+  static forTest(options: ForTestOptions): DynamicModule {
+    this.testEntities = options.entities
 
     return {
-      type: "postgres",
-      url: connectionUri,
-      entities,
-      synchronize: true,
-      autoLoadEntities: true,
+      module: SharedDatabaseModule,
+      imports: [
+        TypeOrmModule.forRoot({
+          type: "postgres",
+          url: this.workerDatabaseUrl(),
+          entities: options.entities,
+          synchronize: false,
+        }),
+      ],
+      exports: [TypeOrmModule],
     }
+  }
+
+  static async setupTestDatabase(): Promise<void> {
+    if (this.testDataSource) return
+
+    const { baseUrl, testDbName } = this.getWorkerDbInfo()
+
+    // Connect to the base database to create the worker-specific database
+    const adminDataSource = new DataSource({
+      type: "postgres",
+      url: baseUrl,
+    })
+    await adminDataSource.initialize()
+
+    await adminDataSource.query(
+      `DROP DATABASE IF EXISTS "${testDbName}" WITH (FORCE)`,
+    )
+    await adminDataSource.query(`CREATE DATABASE "${testDbName}"`)
+    await adminDataSource.destroy()
+
+    // Build the worker database URL
+    const workerUrl = new URL(baseUrl)
+    workerUrl.pathname = `/${testDbName}`
+
+    // Initialize the worker-specific database with synchronize
+    this.testDataSource = new DataSource({
+      type: "postgres",
+      url: workerUrl.toString(),
+      entities: this.testEntities,
+      synchronize: true,
+    })
+    await this.testDataSource.initialize()
+  }
+
+  static async clearTestDatabase(): Promise<void> {
+    if (!this.testDataSource) return
+
+    const tableNames = this.testDataSource.entityMetadatas
+      .map((meta) => meta.tableName)
+      .join(", ")
+
+    if (tableNames) {
+      await this.testDataSource.query(`TRUNCATE TABLE ${tableNames} CASCADE`)
+    }
+  }
+
+  static getTestDataSource(): DataSource {
+    if (!this.testDataSource) {
+      throw new Error(
+        "SharedDatabaseModule not initialized. Call setupTestDatabase() first.",
+      )
+    }
+    return this.testDataSource
+  }
+
+  static async closeTestConnection(): Promise<void> {
+    if (this.testDataSource) {
+      await this.testDataSource.destroy()
+    }
+  }
+
+  private static getWorkerDbInfo(): { baseUrl: string; testDbName: string } {
+    const baseUrl = process.env.DATABASE_URL
+    if (!baseUrl) {
+      throw new Error(
+        "DATABASE_URL environment variable is required for test database setup",
+      )
+    }
+
+    const url = new URL(baseUrl)
+    const dbName = url.pathname.slice(1)
+    const poolId =
+      process.env.VITEST_POOL_ID ?? process.env.JEST_WORKER_ID ?? "0"
+    return { baseUrl, testDbName: `${dbName}_test_${poolId}` }
+  }
+
+  private static workerDatabaseUrl(): string {
+    const { baseUrl, testDbName } = this.getWorkerDbInfo()
+    const url = new URL(baseUrl)
+    url.pathname = `/${testDbName}`
+    return url.toString()
   }
 
   private static createProductionConfiguration(
@@ -104,36 +146,11 @@ export class SharedDatabaseModule implements OnModuleDestroy {
       type: "postgres",
       url: configService.get("DATABASE_URL"),
       entities: options.entities || [
-        join(findMainPath(), isJest() ? "" : "dist", ENTITIES_PATH),
+        join(findMainPath(), "dist", ENTITIES_PATH),
       ],
       migrations: options.migrations || [join(findMainPath(), MIGRATIONS_PATH)],
       synchronize: false,
       autoLoadEntities: true,
-    }
-  }
-
-  static getTestDataSource(): DataSource {
-    return this.testDataSource
-  }
-
-  static async closeTestConnection(): Promise<void> {
-    if (this.testDataSource) {
-      await this.testDataSource.destroy()
-    }
-    if (this.testContainer) {
-      await this.testContainer.stop()
-    }
-  }
-
-  static async clearTestDatabase(): Promise<void> {
-    if (this.testDataSource) {
-      await this.testDataSource.synchronize(true)
-    }
-  }
-
-  async onModuleDestroy() {
-    if (SharedDatabaseModule.testDataSource) {
-      await SharedDatabaseModule.testDataSource.destroy()
     }
   }
 }
