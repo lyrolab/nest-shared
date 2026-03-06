@@ -17,13 +17,19 @@ npm install @openrouter/ai-sdk-provider ai
 
 ## Usage
 
-1. Import the AI module in your `app.module.ts`:
+1. Import and configure the AI module in your `app.module.ts`:
 
 ```typescript
-import { AiModule } from "@lyrolab/nest-shared/ai"
+import { SharedAiModule } from "@lyrolab/nest-shared/ai"
 
 @Module({
-  imports: [AiModule],
+  imports: [
+    SharedAiModule.forRoot({
+      apiKey: "your-openrouter-api-key",
+      defaultModel: "google/gemini-2.0-flash-001",
+      cacheTtlMs: 60_000,
+    }),
+  ],
 })
 export class AppModule {}
 ```
@@ -52,12 +58,34 @@ export class MyService {
 
 ## Configuration
 
-The AI module requires the following environment variable:
+The AI module is configured explicitly through module options:
 
-- `OPENROUTER_API_KEY`: Your OpenRouter API key for authentication
+- `apiKey` (required): OpenRouter API key used for authentication
+- `defaultModel` (optional): fallback model used by `AiService.model`
+- `cacheTtlMs` (optional): per-entry cache TTL in milliseconds for AI responses
 
-The module automatically configures:
+The module configures:
 
 - Response caching using the shared cache module
 - Default model selection (Google Gemini 2.0 Flash)
 - Type-safe model interactions
+
+You can also configure it asynchronously:
+
+```typescript
+import { ConfigService } from "@nestjs/config"
+import { SharedAiModule } from "@lyrolab/nest-shared/ai"
+
+@Module({
+  imports: [
+    SharedAiModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        apiKey: configService.getOrThrow<string>("OPENROUTER_API_KEY"),
+        cacheTtlMs: configService.get<number>("AI_CACHE_TTL_MS"),
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```

@@ -1,0 +1,1 @@
+export const AI_MODULE_OPTIONS = "AI_MODULE_OPTIONS"

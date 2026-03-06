@@ -27,14 +27,16 @@ npm install @lyrolab/nest-shared
 
 ```typescript
 import { SharedDatabaseModule } from "@lyrolab/nest-shared/database"
-import { AiModule } from "@lyrolab/nest-shared/ai"
+import { SharedAiModule } from "@lyrolab/nest-shared/ai"
 import { SharedQueueModule } from "@lyrolab/nest-shared/queue"
 import { SharedCacheModule } from "@lyrolab/nest-shared/cache"
 
 @Module({
   imports: [
     SharedDatabaseModule.forRoot(),
-    AiModule,
+    SharedAiModule.forRoot({
+      apiKey: "your-openrouter-api-key",
+    }),
     SharedQueueModule,
     SharedCacheModule.forRoot(),
   ],

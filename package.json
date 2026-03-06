@@ -61,8 +61,8 @@
   },
   "scripts": {
     "prebuild": "rimraf dist",
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint 'src/**/*.ts' --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -169,12 +169,8 @@
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",
     "roots": [
-      "<rootDir>/src/",
-      "<rootDir>/libs/"
-    ],
-    "moduleNameMapper": {
-      "^@app/nest-shared(|/.*)$": "<rootDir>/libs/nest-shared/src/$1"
-    }
+      "<rootDir>/src/"
+    ]
   },
   "commitlint": {
     "extends": [

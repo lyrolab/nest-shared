@@ -7,6 +7,8 @@ import {
 } from "@openrouter/ai-sdk-provider"
 import { wrapLanguageModel } from "ai"
 import { Cache } from "cache-manager"
+import { AI_MODULE_OPTIONS } from "../ai.constants"
+import { AiModuleOptions } from "../interfaces/ai-module-options.interface"
 
 const DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 
@@ -19,9 +21,12 @@ export class AiService {
   private readonly openrouter: OpenRouterProvider
   private readonly openrouterChat: LanguageModelV3
 
-  constructor(@Inject(CACHE_MANAGER) private cache: Cache) {
+  constructor(
+    @Inject(CACHE_MANAGER) private cache: Cache,
+    @Inject(AI_MODULE_OPTIONS) private options: AiModuleOptions,
+  ) {
     this.openrouter = createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY,
+      apiKey: this.options.apiKey,
     })
     this.openrouterChat = this.buildModel()
   }
@@ -31,7 +36,9 @@ export class AiService {
   }
 
   buildModel({ model }: BuildModelOptions = {}) {
-    return this.wrapModel(this.openrouter.chat(model ?? DEFAULT_MODEL))
+    return this.wrapModel(
+      this.openrouter.chat(model ?? this.options.defaultModel ?? DEFAULT_MODEL),
+    )
   }
 
   wrapModel(model: LanguageModelV3) {
@@ -60,6 +67,11 @@ export class AiService {
     }
 
     const result = await doGenerate()
+
+    if (this.options.cacheTtlMs !== undefined) {
+      await this.cache.set(cacheKey, result, this.options.cacheTtlMs)
+      return result
+    }
 
     await this.cache.set(cacheKey, result)
     return result
