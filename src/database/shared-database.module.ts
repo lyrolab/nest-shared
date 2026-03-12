@@ -93,7 +93,7 @@ export class SharedDatabaseModule {
     if (!this.testDataSource) return
 
     const tableNames = this.testDataSource.entityMetadatas
-      .map((meta) => meta.tableName)
+      .map((meta) => `"${meta.tableName}"`)
       .join(", ")
 
     if (tableNames) {
