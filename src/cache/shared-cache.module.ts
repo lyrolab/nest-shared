@@ -21,7 +21,14 @@ export class SharedCacheModule {
             ttl: configService.get("CACHE_TTL")
               ? +configService.get("CACHE_TTL") * 1000
               : undefined,
-            stores: [new KeyvRedis(redisConfig.url)],
+            stores: [
+              new KeyvRedis(
+                redisConfig.url,
+                redisConfig.keyPrefix
+                  ? { namespace: redisConfig.keyPrefix }
+                  : {},
+              ),
+            ],
           }),
           inject: [ConfigService, RedisConfig],
         }),

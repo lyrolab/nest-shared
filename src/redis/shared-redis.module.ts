@@ -30,12 +30,15 @@ export class SharedRedisModule {
       )
     }
 
+    const poolId =
+      process.env.VITEST_POOL_ID ?? process.env.JEST_WORKER_ID ?? "0"
+
     return {
       module: SharedRedisModule,
       providers: [
         {
           provide: RedisConfig,
-          useValue: new RedisConfig(redisUrl),
+          useValue: new RedisConfig(redisUrl, `test_${poolId}`),
         },
       ],
       exports: [RedisConfig],

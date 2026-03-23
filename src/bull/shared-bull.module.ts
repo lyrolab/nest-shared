@@ -15,9 +15,8 @@ export class SharedBullModule {
           imports: [ConfigModule],
           inject: [RedisConfig],
           useFactory: (redisConfig: RedisConfig) => ({
-            connection: {
-              url: redisConfig.url,
-            },
+            connection: { url: redisConfig.url },
+            ...(redisConfig.keyPrefix && { prefix: redisConfig.keyPrefix }),
           }),
         }),
       ],
