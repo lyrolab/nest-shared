@@ -46,6 +46,8 @@ export class QueueProcessor extends WorkerHost implements OnModuleInit {
       await jobProcessor.process(job)
     } catch (error) {
       console.error(error)
+      // Rethrow so BullMQ marks the job failed and honors attempts/backoff.
+      throw error
     }
   }
 
