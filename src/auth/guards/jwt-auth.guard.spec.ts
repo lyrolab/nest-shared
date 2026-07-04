@@ -2,9 +2,6 @@ import { ExecutionContext } from "@nestjs/common"
 import { Reflector } from "@nestjs/core"
 import { JwtAuthGuard } from "./jwt-auth.guard"
 
-// The base passport guard (AuthGuard("jwt")) sits one prototype up from
-// JwtAuthGuard. We spy on it so `super.canActivate` returns a sentinel we can
-// assert on, without booting a real passport strategy.
 const basePrototype = Object.getPrototypeOf(JwtAuthGuard.prototype) as {
   canActivate: (context: ExecutionContext) => unknown
 }
@@ -50,7 +47,6 @@ describe("JwtAuthGuard", () => {
   })
 
   it("requires JWT auth for /api routes (no path-prefix bypass)", () => {
-    // Regression guard for the removed `startsWith("/api")` bypass.
     expect(guard.canActivate(createContext("/api/boards"))).toBe(SUPER_SENTINEL)
     expect(superSpy).toHaveBeenCalledTimes(1)
   })

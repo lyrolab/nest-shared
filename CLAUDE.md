@@ -25,10 +25,12 @@ nest-shared/
 ## Conventions
 
 ### Module Structure
+
 - Each module lives in `src/<module>/` with its own `index.ts` barrel export.
 - Every module **must** have a `README.md` in its directory explaining what it does, how to use it, and what configuration it requires.
 
 ### Adding a New Module
+
 1. Create `src/<module>/` with an `index.ts` that re-exports all public symbols.
 2. Write a `README.md` for the module.
 3. Add an entry to the `exports` map in `package.json`:
@@ -44,10 +46,19 @@ nest-shared/
 4. Update the root `README.md` module catalog table to include the new module.
 
 ### Code Style
+
 - TypeScript, NestJS conventions.
 - Use `@nestjs/common` decorators and patterns.
 - Dynamic modules use `forRoot()` / `forRootAsync()` / `forTest()` naming.
 - Tests use Jest and live alongside source files (`*.spec.ts`).
+
+### Comments
+
+Write self-documenting code; don't comment. Only comment to explain a non-obvious _why_ (a workaround, a gotcha, a subtle invariant) — never to restate _what_ the code does.
+
+### Writing (code, docs, PRs, messages)
+
+Describe only the current state. Never narrate history or the path that led here ("previously we used X but…", "changed from…", "now we…"). When editing a doc that describes an old state, overwrite it as if the new state always was — no diff-speak, no "updated to".
 
 ## Releases
 
