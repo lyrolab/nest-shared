@@ -17,10 +17,18 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
     ])
     if (isPublic) return true
 
-    // Allow health and API docs endpoints (from external modules we can't decorate)
+    // Allow the health-check endpoint, which lives in an external module we
+    // can't decorate with @Public(). This is an exact match on a single known
+    // unauthenticated endpoint (k8s liveness/readiness probe) — never a prefix.
+    //
+    // NOTE: there used to be a `request.path.startsWith("/api")` branch here to
+    // expose Swagger docs. It was a security hole: it skipped JWT auth for every
+    // route under /api. It is also unnecessary — SwaggerModule.setup() registers
+    // its routes directly on the Express adapter, outside the Nest request
+    // lifecycle, so this guard never runs on them. Removed. Everything that must
+    // be public now goes through @Public() (or this narrow /health exception).
     const request = context.switchToHttp().getRequest<Request>()
-    if (request.path === "/health" || request.path.startsWith("/api"))
-      return true
+    if (request.path === "/health") return true
 
     return super.canActivate(context)
   }
