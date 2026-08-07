@@ -11,6 +11,11 @@ export type JobProcessorMetadata = {
    * @example "0 0 * * *"
    */
   cron?: string
+
+  /**
+   * The named queue this job runs on. Omitted means the default queue.
+   */
+  queue?: string
 }
 
 export const JobProcessor = DiscoveryService.createDecorator<

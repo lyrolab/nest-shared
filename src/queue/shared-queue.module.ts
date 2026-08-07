@@ -1,24 +1,41 @@
-import { BullModule } from "@nestjs/bullmq"
+import { BullModule, getQueueToken } from "@nestjs/bullmq"
 import { DynamicModule, Module, Provider } from "@nestjs/common"
 import { DiscoveryModule } from "@nestjs/core"
+import { Queue } from "bullmq"
 import { QueueController } from "./controllers/queue.controller"
 import {
+  QueueDefinition,
   QueueModuleAsyncOptions,
   QueueModuleOptions,
   QueueOptionsFactory,
 } from "./interfaces/queue-options.interface"
+import { createQueueProcessor } from "./processors/queue-processor.factory"
 import { QueueProcessor } from "./processors/queue.processor"
-import { DEFAULT_QUEUE, QUEUE_MODULE_OPTIONS } from "./queue.constants"
+import {
+  DEFAULT_QUEUE,
+  QUEUE_DEFINITIONS,
+  QUEUE_MAP,
+  QUEUE_MODULE_OPTIONS,
+} from "./queue.constants"
+import { JobRegistryService } from "./services/job-registry.service"
 import { QueueService } from "./services/queue.service"
 
 @Module({})
 export class SharedQueueModule {
   static forRoot(options: QueueModuleOptions = {}): DynamicModule {
+    const queueDefinitions = this.validateQueueDefinitions(options.queues)
+    const queueNames = this.queueNames(queueDefinitions)
+
     return {
       module: SharedQueueModule,
       global: true,
       imports: [
-        BullModule.registerQueue({ name: DEFAULT_QUEUE }),
+        BullModule.registerQueue(
+          ...queueNames.map((name) => ({
+            name,
+            ...(options.telemetry && { telemetry: options.telemetry }),
+          })),
+        ),
         DiscoveryModule,
       ],
       providers: [
@@ -26,8 +43,7 @@ export class SharedQueueModule {
           provide: QUEUE_MODULE_OPTIONS,
           useValue: options,
         },
-        QueueService,
-        QueueProcessor,
+        ...this.createCommonProviders(queueDefinitions),
       ],
       exports: [QueueService],
       controllers: [QueueController],
@@ -35,22 +51,79 @@ export class SharedQueueModule {
   }
 
   static forRootAsync(options: QueueModuleAsyncOptions): DynamicModule {
+    const queueDefinitions = this.validateQueueDefinitions(options.queues)
+    const queueNames = this.queueNames(queueDefinitions)
+
     return {
       module: SharedQueueModule,
       global: true,
       imports: [
-        BullModule.registerQueue({ name: DEFAULT_QUEUE }),
+        BullModule.registerQueueAsync(
+          ...queueNames.map((name) => ({
+            name,
+            useFactory: (moduleOptions?: QueueModuleOptions) => ({
+              ...(moduleOptions?.telemetry && {
+                telemetry: moduleOptions.telemetry,
+              }),
+            }),
+            inject: [QUEUE_MODULE_OPTIONS],
+          })),
+        ),
         DiscoveryModule,
         ...(options.imports || []),
       ],
       providers: [
         ...this.createAsyncProviders(options),
-        QueueService,
-        QueueProcessor,
+        ...this.createCommonProviders(queueDefinitions),
       ],
-      exports: [QueueService],
+      exports: [QueueService, QUEUE_MODULE_OPTIONS],
       controllers: [QueueController],
     }
+  }
+
+  private static validateQueueDefinitions(
+    queues: QueueDefinition[] = [],
+  ): QueueDefinition[] {
+    if (queues.some((queue) => queue.name === DEFAULT_QUEUE)) {
+      throw new Error(
+        `Queue name "${DEFAULT_QUEUE}" is reserved for the default queue. Use the module-level "concurrency" option instead.`,
+      )
+    }
+
+    const names = queues.map((queue) => queue.name)
+    const duplicates = names.filter((name, i) => names.indexOf(name) !== i)
+    if (duplicates.length > 0) {
+      throw new Error(`Duplicate queue definitions: ${duplicates.join(", ")}`)
+    }
+
+    return queues
+  }
+
+  private static queueNames(queueDefinitions: QueueDefinition[]): string[] {
+    return [DEFAULT_QUEUE, ...queueDefinitions.map((queue) => queue.name)]
+  }
+
+  private static createCommonProviders(
+    queueDefinitions: QueueDefinition[],
+  ): Provider[] {
+    const queueNames = this.queueNames(queueDefinitions)
+
+    return [
+      {
+        provide: QUEUE_DEFINITIONS,
+        useValue: queueDefinitions,
+      },
+      {
+        provide: QUEUE_MAP,
+        useFactory: (...queues: Queue[]) =>
+          new Map(queueNames.map((name, i) => [name, queues[i]])),
+        inject: queueNames.map((name) => getQueueToken(name)),
+      },
+      JobRegistryService,
+      QueueService,
+      QueueProcessor,
+      ...queueDefinitions.map((definition) => createQueueProcessor(definition)),
+    ]
   }
 
   private static createAsyncProviders(

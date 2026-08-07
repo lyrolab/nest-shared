@@ -40,4 +40,11 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-member-access': 'off',
     },
   },
+  {
+    files: ['**/*.spec.ts'],
+    rules: {
+      // expect(mock.method) on jest mocks is the canonical assertion pattern.
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );

@@ -1,2 +1,4 @@
 export const DEFAULT_QUEUE = "default"
 export const QUEUE_MODULE_OPTIONS = "QUEUE_MODULE_OPTIONS"
+export const QUEUE_DEFINITIONS = "QUEUE_DEFINITIONS"
+export const QUEUE_MAP = "QUEUE_MAP"
