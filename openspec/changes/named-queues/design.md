@@ -33,13 +33,13 @@ Constraints:
 
 `QueueDefinition = { name: string; concurrency?: number }`. `forRoot({ queues })` and `forRootAsync({ queues, ...asyncOptions })` take the list as a plain (non-factory) value because `BullModule.registerQueue(...)` must run synchronously when the dynamic module is built. The async factory keeps supplying the existing `QueueModuleOptions` (default-queue `concurrency`, and now `telemetry`). Alternative — allowing the factory to return `queues` — was rejected: queue registration cannot wait for DI.
 
-### D2 — One processor class per queue via a class factory
+### D2 — One processor class per queue via a class factory, default queue included
 
-A factory `createQueueProcessor(queueDef)` returns a distinct subclass of the shared processor logic with `Processor({ name }, { concurrency })` applied programmatically, registered as a provider per named queue. Discovery/scheduling/dispatch logic stays in one base class; only the queue binding and worker options differ. The default queue keeps the existing `QueueProcessor` class and its `SetMetadata` concurrency path untouched (regression safety). Alternative — one worker multiplexing several queues — is impossible in BullMQ.
+A factory `createQueueProcessor(queueDef)` returns a distinct subclass of `BaseQueueProcessor` with `@Processor(name)` applied programmatically, registered as a provider per queue — the default queue is just `{ name: DEFAULT_QUEUE }` flowing through the same factory, not a special case. Worker options (concurrency, telemetry) are written once in the factory via constructor-time `SetMetadata`, because telemetry may only be known at DI time (`forRootAsync`); the default queue's concurrency falls back to the module-level `concurrency` option inside that single site. Alternative — one worker multiplexing several queues — is impossible in BullMQ.
 
 ### D3 — Routing by decorator metadata, resolved at call time from discovery
 
-`@JobProcessor` metadata gains `queue?: string`. `QueueService` receives a map of queue name → `Queue` instance (injected via `getQueueToken(name)` for every registered queue) and resolves a job name to its queue by scanning discovered `@JobProcessor` providers (same `DiscoveryService` pattern the processor already uses). Unknown job names (e.g. ad-hoc `QueueController` adds) fall back to the default queue — today's behavior. Alternative — an eagerly built static map — adds init-ordering risk for no gain; scan result may be memoized after first resolution.
+`@JobProcessor` metadata gains `queue?: string`. A `JobRegistryService` scans discovered `@JobProcessor` providers (memoized after first resolution) and resolves job names to queues; `QueueService` injects the registry plus a `QUEUE_MAP` (queue name → `Queue` instance, built from `getQueueToken(name)` for every registered queue). The registry derives the set of valid queue names from `QUEUE_MAP`'s keys, so the queue topology has a single source. Unknown job names (e.g. ad-hoc `QueueController` adds) fall back to the default queue — today's behavior.
 
 ### D4 — Job-name uniqueness is global; cross-queue duplicates fail fast
 
@@ -62,7 +62,7 @@ Each queue's processor schedules only the cron jobs whose metadata resolves to i
 
 ### D8 — Tests stay at the unit level with mocked `Queue` instances
 
-The existing suite (`queue.processor.spec.ts`) mocks `DiscoveryService` and `Queue`; the new suite follows suit — no Redis in CI. Nest `Test.createTestingModule` covers provider wiring (per-queue processors, routing map); mocked queues cover routing, bulk grouping, scheduling, cleanup, and telemetry threading. The no-option regression path gets its own dedicated tests.
+Suites mock `DiscoveryService` and `Queue` — no Redis in CI. Nest `Test.createTestingModule` covers provider wiring (per-queue processors, routing map); mocked queues cover routing, bulk grouping, scheduling, cleanup, and telemetry threading. The no-option regression path gets its own dedicated tests.
 
 ## Risks / Trade-offs
 

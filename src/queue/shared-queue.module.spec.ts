@@ -1,10 +1,20 @@
 import { BullModule, getQueueToken } from "@nestjs/bullmq"
 import { Test } from "@nestjs/testing"
 import { Queue, Telemetry } from "bullmq"
-import { QueueProcessor } from "./processors/queue.processor"
+import { BaseQueueProcessor } from "./processors/base-queue.processor"
 import { DEFAULT_QUEUE } from "./queue.constants"
 import { QueueService } from "./services/queue.service"
 import { SharedQueueModule } from "./shared-queue.module"
+
+type ProcessorClass = new (...args: any[]) => BaseQueueProcessor
+
+const findProcessorClass = (
+  dynamicModule: ReturnType<typeof SharedQueueModule.forRoot>,
+  name: string,
+) =>
+  (dynamicModule.providers ?? []).find(
+    (provider) => typeof provider === "function" && provider.name === name,
+  ) as ProcessorClass
 
 describe("SharedQueueModule", () => {
   const telemetry = { tracer: {} } as unknown as Telemetry
@@ -53,13 +63,10 @@ describe("SharedQueueModule", () => {
       })
 
       const providerNames = (dynamicModule.providers ?? [])
-        .filter(
-          (provider): provider is typeof QueueProcessor =>
-            typeof provider === "function",
-        )
-        .map((provider) => provider.name)
+        .filter((provider) => typeof provider === "function")
+        .map((provider) => (provider as ProcessorClass).name)
 
-      expect(providerNames).toContain("QueueProcessor")
+      expect(providerNames).toContain("QueueProcessor_default")
       expect(providerNames).toContain("QueueProcessor_sync")
       expect(providerNames).toContain("QueueProcessor_notifications")
     })
@@ -136,15 +143,16 @@ describe("SharedQueueModule", () => {
       ])
 
       expect(testingModule.get(QueueService)).toBeInstanceOf(QueueService)
-      expect(testingModule.get(QueueProcessor)).toBeInstanceOf(QueueProcessor)
-
-      const namedProcessorClass = (dynamicModule.providers ?? []).find(
-        (provider) =>
-          typeof provider === "function" &&
-          provider.name === "QueueProcessor_sync",
-      ) as typeof QueueProcessor
-
-      expect(testingModule.get(namedProcessorClass)).toBeDefined()
+      expect(
+        testingModule.get(
+          findProcessorClass(dynamicModule, "QueueProcessor_default"),
+        ),
+      ).toBeInstanceOf(BaseQueueProcessor)
+      expect(
+        testingModule.get(
+          findProcessorClass(dynamicModule, "QueueProcessor_sync"),
+        ),
+      ).toBeInstanceOf(BaseQueueProcessor)
     })
 
     it("resolves QueueService and per-queue processors with forRootAsync", async () => {
@@ -158,7 +166,11 @@ describe("SharedQueueModule", () => {
       ])
 
       expect(testingModule.get(QueueService)).toBeInstanceOf(QueueService)
-      expect(testingModule.get(QueueProcessor)).toBeInstanceOf(QueueProcessor)
+      expect(
+        testingModule.get(
+          findProcessorClass(dynamicModule, "QueueProcessor_default"),
+        ),
+      ).toBeInstanceOf(BaseQueueProcessor)
     })
   })
 })

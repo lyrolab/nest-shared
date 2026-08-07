@@ -24,21 +24,26 @@ export interface QueueModuleOptions {
   telemetry?: Telemetry
 }
 
+/**
+ * Options resolvable through an async factory. `queues` is excluded: BullMQ
+ * queue registration happens at module-definition time, so the queue list is a
+ * static property of `QueueModuleAsyncOptions` instead.
+ */
+export type QueueModuleFactoryOptions = Omit<QueueModuleOptions, "queues">
+
 export interface QueueModuleAsyncOptions
   extends Pick<ModuleMetadata, "imports"> {
-  /**
-   * Static because BullMQ queue registration happens at module-definition
-   * time, before any async factory can run.
-   */
   queues?: QueueDefinition[]
   useFactory?: (
     ...args: any[]
-  ) => Promise<QueueModuleOptions> | QueueModuleOptions
+  ) => Promise<QueueModuleFactoryOptions> | QueueModuleFactoryOptions
   inject?: any[]
   useClass?: Type<QueueOptionsFactory>
   useExisting?: Type<QueueOptionsFactory>
 }
 
 export interface QueueOptionsFactory {
-  createQueueOptions(): Promise<QueueModuleOptions> | QueueModuleOptions
+  createQueueOptions():
+    | Promise<QueueModuleFactoryOptions>
+    | QueueModuleFactoryOptions
 }

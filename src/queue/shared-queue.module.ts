@@ -6,77 +6,93 @@ import { QueueController } from "./controllers/queue.controller"
 import {
   QueueDefinition,
   QueueModuleAsyncOptions,
+  QueueModuleFactoryOptions,
   QueueModuleOptions,
   QueueOptionsFactory,
 } from "./interfaces/queue-options.interface"
 import { createQueueProcessor } from "./processors/queue-processor.factory"
-import { QueueProcessor } from "./processors/queue.processor"
 import {
   DEFAULT_QUEUE,
-  QUEUE_DEFINITIONS,
   QUEUE_MAP,
   QUEUE_MODULE_OPTIONS,
 } from "./queue.constants"
 import { JobRegistryService } from "./services/job-registry.service"
 import { QueueService } from "./services/queue.service"
 
+type ModuleConfig = {
+  registerQueues: (queueNames: string[]) => DynamicModule
+  optionsProviders: Provider[]
+  imports?: DynamicModule["imports"]
+  exports: DynamicModule["exports"]
+}
+
 @Module({})
 export class SharedQueueModule {
   static forRoot(options: QueueModuleOptions = {}): DynamicModule {
-    const queueDefinitions = this.validateQueueDefinitions(options.queues)
-    const queueNames = this.queueNames(queueDefinitions)
-
-    return {
-      module: SharedQueueModule,
-      global: true,
-      imports: [
+    return this.buildModule(options.queues, {
+      registerQueues: (queueNames) =>
         BullModule.registerQueue(
           ...queueNames.map((name) => ({
             name,
-            ...(options.telemetry && { telemetry: options.telemetry }),
+            telemetry: options.telemetry,
           })),
         ),
-        DiscoveryModule,
-      ],
-      providers: [
-        {
-          provide: QUEUE_MODULE_OPTIONS,
-          useValue: options,
-        },
-        ...this.createCommonProviders(queueDefinitions),
-      ],
+      optionsProviders: [{ provide: QUEUE_MODULE_OPTIONS, useValue: options }],
       exports: [QueueService],
-      controllers: [QueueController],
-    }
+    })
   }
 
   static forRootAsync(options: QueueModuleAsyncOptions): DynamicModule {
-    const queueDefinitions = this.validateQueueDefinitions(options.queues)
-    const queueNames = this.queueNames(queueDefinitions)
-
-    return {
-      module: SharedQueueModule,
-      global: true,
-      imports: [
+    return this.buildModule(options.queues, {
+      registerQueues: (queueNames) =>
         BullModule.registerQueueAsync(
           ...queueNames.map((name) => ({
             name,
-            useFactory: (moduleOptions?: QueueModuleOptions) => ({
-              ...(moduleOptions?.telemetry && {
-                telemetry: moduleOptions.telemetry,
-              }),
+            useFactory: (moduleOptions?: QueueModuleFactoryOptions) => ({
+              telemetry: moduleOptions?.telemetry,
             }),
             inject: [QUEUE_MODULE_OPTIONS],
           })),
         ),
+      optionsProviders: this.createAsyncProviders(options),
+      imports: options.imports,
+      // QUEUE_MODULE_OPTIONS is exported so the registerQueueAsync factories
+      // (child modules of BullModule) can inject it from the global scope.
+      exports: [QueueService, QUEUE_MODULE_OPTIONS],
+    })
+  }
+
+  private static buildModule(
+    queues: QueueDefinition[] | undefined,
+    config: ModuleConfig,
+  ): DynamicModule {
+    const allDefinitions = [
+      { name: DEFAULT_QUEUE },
+      ...this.validateQueueDefinitions(queues),
+    ]
+    const queueNames = allDefinitions.map((definition) => definition.name)
+
+    return {
+      module: SharedQueueModule,
+      global: true,
+      imports: [
+        config.registerQueues(queueNames),
         DiscoveryModule,
-        ...(options.imports || []),
+        ...(config.imports ?? []),
       ],
       providers: [
-        ...this.createAsyncProviders(options),
-        ...this.createCommonProviders(queueDefinitions),
+        ...config.optionsProviders,
+        {
+          provide: QUEUE_MAP,
+          useFactory: (...queues: Queue[]) =>
+            new Map(queueNames.map((name, i) => [name, queues[i]])),
+          inject: queueNames.map((name) => getQueueToken(name)),
+        },
+        JobRegistryService,
+        QueueService,
+        ...allDefinitions.map((definition) => createQueueProcessor(definition)),
       ],
-      exports: [QueueService, QUEUE_MODULE_OPTIONS],
+      exports: config.exports,
       controllers: [QueueController],
     }
   }
@@ -84,46 +100,19 @@ export class SharedQueueModule {
   private static validateQueueDefinitions(
     queues: QueueDefinition[] = [],
   ): QueueDefinition[] {
-    if (queues.some((queue) => queue.name === DEFAULT_QUEUE)) {
-      throw new Error(
-        `Queue name "${DEFAULT_QUEUE}" is reserved for the default queue. Use the module-level "concurrency" option instead.`,
-      )
+    const seen = new Set<string>()
+    for (const { name } of queues) {
+      if (name === DEFAULT_QUEUE) {
+        throw new Error(
+          `Queue name "${DEFAULT_QUEUE}" is reserved for the default queue. Use the module-level "concurrency" option instead.`,
+        )
+      }
+      if (seen.has(name)) {
+        throw new Error(`Duplicate queue definition: ${name}`)
+      }
+      seen.add(name)
     }
-
-    const names = queues.map((queue) => queue.name)
-    const duplicates = names.filter((name, i) => names.indexOf(name) !== i)
-    if (duplicates.length > 0) {
-      throw new Error(`Duplicate queue definitions: ${duplicates.join(", ")}`)
-    }
-
     return queues
-  }
-
-  private static queueNames(queueDefinitions: QueueDefinition[]): string[] {
-    return [DEFAULT_QUEUE, ...queueDefinitions.map((queue) => queue.name)]
-  }
-
-  private static createCommonProviders(
-    queueDefinitions: QueueDefinition[],
-  ): Provider[] {
-    const queueNames = this.queueNames(queueDefinitions)
-
-    return [
-      {
-        provide: QUEUE_DEFINITIONS,
-        useValue: queueDefinitions,
-      },
-      {
-        provide: QUEUE_MAP,
-        useFactory: (...queues: Queue[]) =>
-          new Map(queueNames.map((name, i) => [name, queues[i]])),
-        inject: queueNames.map((name) => getQueueToken(name)),
-      },
-      JobRegistryService,
-      QueueService,
-      QueueProcessor,
-      ...queueDefinitions.map((definition) => createQueueProcessor(definition)),
-    ]
   }
 
   private static createAsyncProviders(

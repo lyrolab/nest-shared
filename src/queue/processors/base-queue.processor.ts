@@ -1,23 +1,7 @@
 import { WorkerHost } from "@nestjs/bullmq"
 import { OnModuleInit } from "@nestjs/common"
-import { Job, Queue, Telemetry } from "bullmq"
+import { Job, Queue } from "bullmq"
 import { JobRegistryService } from "../services/job-registry.service"
-
-export type WorkerMetadata = {
-  concurrency?: number
-  telemetry?: Telemetry
-}
-
-export const buildWorkerMetadata = (
-  concurrency?: number,
-  telemetry?: Telemetry,
-): WorkerMetadata | null => {
-  if (!concurrency && !telemetry) return null
-  return {
-    ...(concurrency && { concurrency }),
-    ...(telemetry && { telemetry }),
-  }
-}
 
 export abstract class BaseQueueProcessor
   extends WorkerHost
@@ -33,7 +17,6 @@ export abstract class BaseQueueProcessor
   }
 
   async onModuleInit() {
-    this.registry.validate()
     await this.syncSchedulers()
   }
 

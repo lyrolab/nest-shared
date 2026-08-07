@@ -1,12 +1,12 @@
-import { Inject, Injectable, Optional } from "@nestjs/common"
+import { Inject, Injectable } from "@nestjs/common"
 import { DiscoveryService } from "@nestjs/core"
+import { Queue } from "bullmq"
 import {
   JobProcessor,
   JobProcessorMetadata,
 } from "../decorators/queue.decorator"
-import { QueueDefinition } from "../interfaces/queue-options.interface"
 import { JobProcessorInterface } from "../models/job-processor-interface"
-import { DEFAULT_QUEUE, QUEUE_DEFINITIONS } from "../queue.constants"
+import { DEFAULT_QUEUE, QUEUE_MAP } from "../queue.constants"
 
 export type JobRegistration = {
   name: string
@@ -21,9 +21,7 @@ export class JobRegistryService {
 
   constructor(
     private readonly discoveryService: DiscoveryService,
-    @Optional()
-    @Inject(QUEUE_DEFINITIONS)
-    private readonly queueDefinitions: QueueDefinition[] = [],
+    @Inject(QUEUE_MAP) private readonly queues: Map<string, Queue>,
   ) {}
 
   getJobs(): JobRegistration[] {
@@ -38,17 +36,9 @@ export class JobRegistryService {
     return this.load().get(name)?.queue ?? DEFAULT_QUEUE
   }
 
-  validate(): void {
-    this.load()
-  }
-
   private load(): Map<string, JobRegistration> {
     if (this.registrations) return this.registrations
 
-    const knownQueues = new Set([
-      DEFAULT_QUEUE,
-      ...this.queueDefinitions.map((queue) => queue.name),
-    ])
     const registrations = new Map<string, JobRegistration>()
 
     for (const provider of this.discoveryService.getProviders({
@@ -64,7 +54,7 @@ export class JobRegistryService {
         typeof metadata === "string" ? { name: metadata } : metadata
       const { name, cron, queue = DEFAULT_QUEUE } = normalized
 
-      if (!knownQueues.has(queue)) {
+      if (!this.queues.has(queue)) {
         throw new Error(
           `Job "${name}" is registered on unknown queue "${queue}". Declare it in the module's "queues" option.`,
         )

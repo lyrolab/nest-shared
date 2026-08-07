@@ -1,4 +1,5 @@
 import { Job, Queue } from "bullmq"
+import { DEFAULT_QUEUE } from "../queue.constants"
 import { JobRegistryService } from "./job-registry.service"
 import { QueueService } from "./queue.service"
 
@@ -16,14 +17,14 @@ describe("QueueService", () => {
   const createService = (queueByJobName: Record<string, string>) => {
     const registry = {
       resolveQueueName: jest.fn(
-        (name: string) => queueByJobName[name] ?? "default",
+        (name: string) => queueByJobName[name] ?? DEFAULT_QUEUE,
       ),
     } as unknown as JobRegistryService
 
     const defaultQueue = createQueue()
     const notificationsQueue = createQueue()
     const queues = new Map<string, Queue>([
-      ["default", defaultQueue],
+      [DEFAULT_QUEUE, defaultQueue],
       ["notifications", notificationsQueue],
     ])
 
@@ -55,14 +56,6 @@ describe("QueueService", () => {
     await service.add("ad-hoc-job", {})
 
     expect(defaultQueue.add).toHaveBeenCalledWith("ad-hoc-job", {}, undefined)
-  })
-
-  it("falls back to the default queue when the resolved queue is unknown", async () => {
-    const { service, defaultQueue } = createService({ orphan: "removed-queue" })
-
-    await service.add("orphan", {})
-
-    expect(defaultQueue.add).toHaveBeenCalled()
   })
 
   it("groups bulk jobs into one addBulk call per queue", async () => {

@@ -5,9 +5,13 @@ import {
   QueueDefinition,
   QueueModuleOptions,
 } from "../interfaces/queue-options.interface"
-import { QUEUE_MODULE_OPTIONS } from "../queue.constants"
+import {
+  DEFAULT_QUEUE,
+  QUEUE_MODULE_OPTIONS,
+  WORKER_METADATA_KEY,
+} from "../queue.constants"
 import { JobRegistryService } from "../services/job-registry.service"
-import { BaseQueueProcessor, buildWorkerMetadata } from "./base-queue.processor"
+import { BaseQueueProcessor } from "./base-queue.processor"
 
 export function createQueueProcessor(
   queueDefinition: QueueDefinition,
@@ -26,15 +30,21 @@ export function createQueueProcessor(
     ) {
       super(registry, queue)
 
-      const workerMetadata = buildWorkerMetadata(
-        queueDefinition.concurrency,
-        options?.telemetry,
-      )
-      if (workerMetadata) {
-        SetMetadata(
-          "bullmq:worker_metadata",
-          workerMetadata,
-        )(NamedQueueProcessor)
+      // The default queue's concurrency comes from the module-level option;
+      // telemetry may only be known at DI time (forRootAsync), hence
+      // constructor-time metadata instead of decorator worker options.
+      const concurrency =
+        queueDefinition.concurrency ??
+        (queueDefinition.name === DEFAULT_QUEUE
+          ? options?.concurrency
+          : undefined)
+      const telemetry = options?.telemetry
+
+      if (concurrency || telemetry) {
+        SetMetadata(WORKER_METADATA_KEY, {
+          ...(concurrency && { concurrency }),
+          ...(telemetry && { telemetry }),
+        })(NamedQueueProcessor)
       }
     }
   }
