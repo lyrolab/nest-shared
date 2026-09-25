@@ -8,6 +8,14 @@ import {
 import { AiService } from "./services/ai.service"
 import { SharedAiModule } from "./shared-ai.module"
 
+jest.mock("@openrouter/ai-sdk-provider", () => ({
+  createOpenRouter: jest.fn(),
+}))
+
+jest.mock("ai", () => ({
+  wrapLanguageModel: jest.fn(),
+}))
+
 class AiOptionsFactoryStub implements AiOptionsFactory {
   createAiOptions() {
     return {

@@ -1,4 +1,4 @@
-import { LanguageModelV3, LanguageModelV3Middleware } from "@ai-sdk/provider"
+import { LanguageModelV4, LanguageModelV4Middleware } from "@ai-sdk/provider"
 import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import { Inject, Injectable } from "@nestjs/common"
 import {
@@ -16,10 +16,16 @@ export type BuildModelOptions = {
   model?: string
 }
 
+export type WrappableLanguageModel = Parameters<
+  typeof wrapLanguageModel
+>[0]["model"]
+
+type GenerateResult = Awaited<ReturnType<LanguageModelV4["doGenerate"]>>
+
 @Injectable()
 export class AiService {
   private readonly openrouter: OpenRouterProvider
-  private readonly openrouterChat: LanguageModelV3
+  private readonly openrouterChat: LanguageModelV4
 
   constructor(
     @Inject(CACHE_MANAGER) private cache: Cache,
@@ -31,22 +37,22 @@ export class AiService {
     this.openrouterChat = this.buildModel()
   }
 
-  get model(): LanguageModelV3 {
+  get model(): LanguageModelV4 {
     return this.openrouterChat
   }
 
-  buildModel({ model }: BuildModelOptions = {}) {
+  buildModel({ model }: BuildModelOptions = {}): LanguageModelV4 {
     return this.wrapModel(
       this.openrouter.chat(model ?? this.options.defaultModel ?? DEFAULT_MODEL),
     )
   }
 
-  wrapModel(model: LanguageModelV3) {
+  wrapModel(model: WrappableLanguageModel): LanguageModelV4 {
     return wrapLanguageModel({
       model,
       middleware: [
         {
-          specificationVersion: "v3",
+          specificationVersion: "v4",
           wrapGenerate: (options) => this.wrapGenerate(options),
         },
       ],
@@ -57,13 +63,13 @@ export class AiService {
     doGenerate,
     params,
   }: Parameters<
-    NonNullable<LanguageModelV3Middleware["wrapGenerate"]>
-  >[0]): Promise<Awaited<ReturnType<LanguageModelV3["doGenerate"]>>> {
+    NonNullable<LanguageModelV4Middleware["wrapGenerate"]>
+  >[0]): Promise<GenerateResult> {
     const cacheKey = "ai:" + JSON.stringify(params)
 
-    const cachedResult = await this.cache.get(cacheKey)
+    const cachedResult = await this.cache.get<GenerateResult>(cacheKey)
     if (cachedResult) {
-      return cachedResult as Awaited<ReturnType<LanguageModelV3["doGenerate"]>>
+      return cachedResult
     }
 
     const result = await doGenerate()
