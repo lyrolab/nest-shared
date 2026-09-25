@@ -1,6 +1,7 @@
 import { CACHE_MANAGER } from "@nestjs/cache-manager"
 import { Cache } from "cache-manager"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { wrapLanguageModel } from "ai"
 import { AI_MODULE_OPTIONS } from "../ai.constants"
 import { AiModuleOptions } from "../interfaces/ai-module-options.interface"
 import { AiService } from "./ai.service"
@@ -63,6 +64,17 @@ describe("AiService", () => {
 
     expect(mockedCreateOpenRouter).toHaveBeenCalledWith({ apiKey: "test-key" })
     expect(openRouter.chat).toHaveBeenCalledWith("openai/gpt-4o-mini")
+  })
+
+  it("wraps models with a v4 middleware", () => {
+    createService({ apiKey: "test-key" })
+
+    const [options] = jest.mocked(wrapLanguageModel).mock.calls[0] ?? []
+    const [middleware] = [options?.middleware].flat()
+
+    expect(options?.model).toEqual({ model: "google/gemini-2.0-flash-001" })
+    expect(middleware?.specificationVersion).toBe("v4")
+    expect(middleware?.wrapGenerate).toBeInstanceOf(Function)
   })
 
   it("returns cached value and skips generation on cache hit", async () => {

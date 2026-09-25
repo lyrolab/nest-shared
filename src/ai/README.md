@@ -5,7 +5,7 @@ The AI module provides a standardized way to interact with AI models using OpenR
 ## Dependencies
 
 ```bash
-npm install @openrouter/ai-sdk-provider ai
+npm install ai@^7 @ai-sdk/provider@^4 @openrouter/ai-sdk-provider@^3
 ```
 
 ## Features
@@ -55,6 +55,18 @@ export class MyService {
   }
 }
 ```
+
+3. Wrap any AI SDK language model (V2, V3 or V4 specification) with the response cache:
+
+```typescript
+import { anthropic } from "@ai-sdk/anthropic"
+
+const model = this.aiService.wrapModel(anthropic("claude-sonnet-5"))
+```
+
+`model`, `buildModel()` and `wrapModel()` return a `LanguageModelV4`.
+
+The package is CommonJS; `ai` v7 is ESM-only and is loaded through Node's `require(esm)` support (Node >= 22).
 
 ## Configuration
 

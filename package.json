@@ -83,7 +83,7 @@
     "passport-jwt": "^4.0.1"
   },
   "peerDependencies": {
-    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider": "^4.0.0",
     "@nestjs/bullmq": "^11.0.0",
     "@nestjs/cache-manager": "^3.0.0",
     "@nestjs/common": "^11.0.0",
@@ -92,8 +92,8 @@
     "@nestjs/swagger": "^11.0.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/typeorm": "^11.0.0",
-    "@openrouter/ai-sdk-provider": "^2.2.3",
-    "ai": "^6.0.86",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
+    "ai": "^7.0.0",
     "bullmq": "^5.0.0",
     "cache-manager": "^6.0.0",
     "class-validator": "^0.14.0 || ^0.15.0",
@@ -101,8 +101,19 @@
     "typeorm": "^0.3.22",
     "zod": "^4.1.13"
   },
+  "peerDependenciesMeta": {
+    "@ai-sdk/provider": {
+      "optional": true
+    },
+    "@openrouter/ai-sdk-provider": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider": "^4.0.18",
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
     "@eslint/eslintrc": "^3.2.0",
@@ -121,7 +132,7 @@
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@nestjs/typeorm": "^11.0.0",
-    "@openrouter/ai-sdk-provider": "^2.2.3",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/npm": "^13.1.4",
@@ -134,7 +145,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/utils": "^8.58.0",
-    "ai": "^6.0.86",
+    "ai": "^7.0.114",
     "bullmq": "^5.46.1",
     "cache-manager": "^6.4.1",
     "class-validator": "^0.14.1",
@@ -156,7 +167,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typeorm": "^0.3.22",
-    "typescript": "^5.7.3",
+    "typescript": "~5.8.3",
     "typescript-eslint": "^8.20.0",
     "zod": "^4.3.6"
   },
