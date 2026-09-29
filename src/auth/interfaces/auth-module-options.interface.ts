@@ -6,6 +6,14 @@ import { ModuleMetadata, Type } from "@nestjs/common"
 export interface ResolvedIssuer {
   jwksUri: string
   audience?: string | string[]
+  /**
+   * Copies the token's `realm_access` and `resource_access[clientId]` roles onto
+   * `AuthUser.roles`. Off by default: an issuer that is trusted to authenticate is
+   * not automatically trusted to grant application roles.
+   */
+  trustRoles?: boolean
+  /** Client whose `resource_access` roles are read when `trustRoles` is set. */
+  clientId?: string
 }
 
 /**
@@ -17,6 +25,8 @@ export interface StaticAuthOptions {
   issuer: string
   audience?: string | string[]
   algorithms?: string[]
+  /** Client whose `resource_access` roles are added to the realm roles. */
+  clientId?: string
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common"
 import { PassportStrategy } from "@nestjs/passport"
+import { Request } from "express"
 import { Algorithm, decode, JwtPayload as SignedJwtPayload } from "jsonwebtoken"
 import { JwksClient, passportJwtSecret, SigningKey } from "jwks-rsa"
 import { ExtractJwt, SecretOrKeyProvider, Strategy } from "passport-jwt"
@@ -8,6 +9,7 @@ import {
   AuthModuleOptions,
   DynamicAuthOptions,
   isDynamicAuthOptions,
+  ResolvedIssuer,
 } from "../interfaces/auth-module-options.interface"
 import { AuthUser, JwtPayload } from "../models/jwt-payload"
 
@@ -18,21 +20,36 @@ const DEFAULT_ALGORITHMS: Algorithm[] = ["RS256"]
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly roleSource: (request: Request) => RoleSource | null
+
   constructor(@Inject(AUTH_MODULE_OPTIONS) options: AuthModuleOptions) {
     const algorithms = (options.algorithms ?? DEFAULT_ALGORITHMS) as Algorithm[]
 
     if (isDynamicAuthOptions(options)) {
+      // The issuer config resolved while picking the signing key is reused in
+      // validate() so roles are read under the same trust decision, without a
+      // second resolver call.
+      const resolved = new WeakMap<Request, ResolvedIssuer>()
       super({
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
         ignoreExpiration: false,
         algorithms,
-        secretOrKeyProvider: JwtStrategy.dynamicSecretOrKeyProvider(options),
+        passReqToCallback: true,
+        secretOrKeyProvider: JwtStrategy.dynamicSecretOrKeyProvider(
+          options,
+          resolved,
+        ),
       })
+      this.roleSource = (request) => {
+        const config = resolved.get(request)
+        return config?.trustRoles ? { clientId: config.clientId } : null
+      }
     } else {
       super({
         jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
         ignoreExpiration: false,
         algorithms,
+        passReqToCallback: true,
         issuer: options.issuer,
         audience: options.audience,
         secretOrKeyProvider: passportJwtSecret({
@@ -42,14 +59,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           jwksUri: options.jwksUri,
         }),
       })
+      this.roleSource = () => ({ clientId: options.clientId })
     }
   }
 
-  validate(payload: JwtPayload): AuthUser {
+  validate(request: Request, payload: JwtPayload): AuthUser {
+    const roleSource = this.roleSource(request)
     return {
       id: payload.sub,
       email: payload.email,
       name: payload.preferred_username,
+      issuer: payload.iss,
+      roles: roleSource ? extractRoles(payload, roleSource.clientId) : [],
     }
   }
 
@@ -66,13 +87,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    */
   private static dynamicSecretOrKeyProvider(
     options: DynamicAuthOptions,
+    resolved: WeakMap<Request, ResolvedIssuer>,
   ): SecretOrKeyProvider {
     // One cached JwksClient per issuer, mirroring passportJwtSecret's posture. The
     // strategy is a singleton, so this Map lives for the process and refreshes keys
     // on `kid` rotation.
     const clients = new Map<string, JwksClient>()
 
-    return (_request, rawJwt: string, done) => {
+    return (request: Request, rawJwt: string, done) => {
       const decoded = decode(rawJwt, { complete: true })
       const payload = decoded?.payload
       if (!decoded || typeof payload !== "object") {
@@ -93,6 +115,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           if (!audienceMatches(config.audience, payload)) {
             return done(new Error("audience mismatch"))
           }
+          resolved.set(request, config)
 
           let client = clients.get(iss)
           if (!client) {
@@ -116,6 +139,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         .catch(() => done(new Error("issuer resolution failed")))
     }
   }
+}
+
+interface RoleSource {
+  clientId?: string
+}
+
+function extractRoles(payload: JwtPayload, clientId?: string): string[] {
+  const realmRoles = payload.realm_access?.roles
+  const clientAccess =
+    clientId &&
+    payload.resource_access &&
+    Object.hasOwn(payload.resource_access, clientId)
+      ? payload.resource_access[clientId]
+      : undefined
+  const clientRoles = clientAccess?.roles
+  const roles = [
+    ...(Array.isArray(realmRoles) ? realmRoles : []),
+    ...(Array.isArray(clientRoles) ? clientRoles : []),
+  ].filter((role): role is string => typeof role === "string")
+  return [...new Set(roles)]
 }
 
 function audienceMatches(
