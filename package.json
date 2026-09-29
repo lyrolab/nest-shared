@@ -33,6 +33,11 @@
       "import": "./dist/cache/index.js",
       "require": "./dist/cache/index.js"
     },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.js",
+      "require": "./dist/config/index.js"
+    },
     "./database": {
       "types": "./dist/database/index.d.ts",
       "import": "./dist/database/index.js",
@@ -114,6 +119,7 @@
     "ai": "^7.0.0",
     "bullmq": "^5.0.0",
     "cache-manager": "^6.0.0",
+    "class-transformer": "^0.5.0",
     "class-validator": "^0.14.0 || ^0.15.0",
     "nest-casl": "^1.9.0",
     "rxjs": "^7.8.1",
@@ -197,6 +203,7 @@
     "ai": "^7.0.114",
     "bullmq": "^5.46.1",
     "cache-manager": "^6.4.1",
+    "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.1.1",

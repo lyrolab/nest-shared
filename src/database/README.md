@@ -57,3 +57,38 @@ The module automatically configures itself based on the environment:
 
 - `DATABASE_URL`: Required in production environment
 - `NODE_ENV`: Set to 'test' for test environment configuration
+
+## TypeORM CLI Data Source
+
+`createCliDataSource(AppModule)` boots the application context, takes the `DataSource` configured by `SharedDatabaseModule`, closes the context and returns the data source for the TypeORM CLI to initialize. Entities and migrations therefore come from the same configuration as the running app.
+
+```typescript
+// src/data-source.ts
+import { createCliDataSource } from "@lyrolab/nest-shared/database"
+import { AppModule } from "./app.module"
+
+export default createCliDataSource(AppModule)
+```
+
+The context boots every module, so the CLI needs the same environment as the app (`DATABASE_URL`, `REDIS_URL`, …).
+
+### Script Convention
+
+Every backend exposes the same database scripts in its `package.json`:
+
+```json
+{
+  "scripts": {
+    "typeorm": "typeorm-ts-node-commonjs -d ./src/data-source.ts",
+    "db:migrate": "npm run build && npm run typeorm -- migration:run",
+    "db:generate": "npm run typeorm -- migration:generate ./src/migrations/$npm_config_name && eslint src/migrations/*-$npm_config_name.ts --fix",
+    "db:seed": "ts-node -r tsconfig-paths/register src/seed/seed.ts"
+  }
+}
+```
+
+| Script        | Purpose                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| `db:migrate`  | Runs pending migrations. Builds first because `SharedDatabaseModule` loads migrations from `dist/migrations` |
+| `db:generate` | Generates a migration from the entity diff: `npm run db:generate --name=add-user-email`                      |
+| `db:seed`     | Inserts development fixtures; must refuse to run against production                                          |
