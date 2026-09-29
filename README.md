@@ -12,18 +12,20 @@ npm install @lyrolab/nest-shared
 
 ## Module Catalog
 
-| Module                                 | Import Path                      | Description                                                     | Key Exports                                                                           | Requires Config |
-| -------------------------------------- | -------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | :-------------: |
-| [AI](./src/ai/README.md)               | `@lyrolab/nest-shared/ai`        | OpenRouter AI service with response caching                     | `SharedAiModule`, `AiService`, `AI_MODULE_OPTIONS`                                    |       ✅        |
-| [Auth](./src/auth/README.md)           | `@lyrolab/nest-shared/auth`      | JWT/Keycloak authentication                                     | `SharedAuthModule`, `JwtAuthGuard`, `@Public()`, `@CurrentUser()`, `keycloakConfig()` |       ✅        |
-| [Bootstrap](./src/bootstrap/README.md) | `@lyrolab/nest-shared/bootstrap` | Application setup (CORS, ValidationPipe, Swagger, filters)      | `configureApp()`                                                                      |       ✅        |
-| [Bull](./src/bull/README.md)           | `@lyrolab/nest-shared/bull`      | BullMQ queue integration backed by Redis                        | `SharedBullModule`                                                                    |       ✅        |
-| [Cache](./src/cache/README.md)         | `@lyrolab/nest-shared/cache`     | Redis-backed caching (preferred over raw Redis)                 | `SharedCacheModule`                                                                   |       ✅        |
-| [Database](./src/database/README.md)   | `@lyrolab/nest-shared/database`  | TypeORM + PostgreSQL connection with TestContainers             | `SharedDatabaseModule`, `TypeOrmExceptionFilter`                                      |       ✅        |
-| [ESLint](./src/eslint/README.md)       | `@lyrolab/nest-shared/eslint`    | Shared ESLint config with custom architecture rules             | `nestArchitecturePlugin`                                                              |       ❌        |
-| [Health](./src/health/README.md)       | `@lyrolab/nest-shared/health`    | Health check endpoint via Terminus                              | `SharedHealthModule`                                                                  |       ❌        |
-| [Queue](./src/queue/README.md)         | `@lyrolab/nest-shared/queue`     | Job processing with decorator-based processors and named queues | `SharedQueueModule`, `QueueService`, `@JobProcessor()`                                |       ✅        |
-| [Redis](./src/redis/README.md)         | `@lyrolab/nest-shared/redis`     | Low-level Redis configuration                                   | `SharedRedisModule`, `RedisConfig`                                                    |       ✅        |
+| Module                                         | Import Path                          | Description                                                     | Key Exports                                                                           | Requires Config |
+| ---------------------------------------------- | ------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | :-------------: |
+| [AI](./src/ai/README.md)                       | `@lyrolab/nest-shared/ai`            | OpenRouter AI service with response caching                     | `SharedAiModule`, `AiService`, `AI_MODULE_OPTIONS`                                    |       ✅        |
+| [Auth](./src/auth/README.md)                   | `@lyrolab/nest-shared/auth`          | JWT/Keycloak authentication                                     | `SharedAuthModule`, `JwtAuthGuard`, `@Public()`, `@CurrentUser()`, `keycloakConfig()` |       ✅        |
+| [Bootstrap](./src/bootstrap/README.md)         | `@lyrolab/nest-shared/bootstrap`     | Application setup (CORS, ValidationPipe, Swagger, filters)      | `configureApp()`                                                                      |       ✅        |
+| [Bull](./src/bull/README.md)                   | `@lyrolab/nest-shared/bull`          | BullMQ queue integration backed by Redis                        | `SharedBullModule`                                                                    |       ✅        |
+| [Cache](./src/cache/README.md)                 | `@lyrolab/nest-shared/cache`         | Redis-backed caching (preferred over raw Redis)                 | `SharedCacheModule`                                                                   |       ✅        |
+| [CASL](./src/casl/README.md)                   | `@lyrolab/nest-shared/casl`          | nest-casl subject hooks and permission test helper              | `BaseHook`, `getAbilityFactory()`                                                     |       ❌        |
+| [Database](./src/database/README.md)           | `@lyrolab/nest-shared/database`      | TypeORM + PostgreSQL connection with TestContainers             | `SharedDatabaseModule`, `TypeOrmExceptionFilter`                                      |       ✅        |
+| [ESLint](./src/eslint/README.md)               | `@lyrolab/nest-shared/eslint`        | Shared ESLint config with custom architecture rules             | `nestArchitecturePlugin`                                                              |       ❌        |
+| [Health](./src/health/README.md)               | `@lyrolab/nest-shared/health`        | Health check endpoint via Terminus                              | `SharedHealthModule`                                                                  |       ❌        |
+| [Observability](./src/observability/README.md) | `@lyrolab/nest-shared/observability` | OpenTelemetry traces, metrics and logs over OTLP                | `startTelemetry()`                                                                    |       ✅        |
+| [Queue](./src/queue/README.md)                 | `@lyrolab/nest-shared/queue`         | Job processing with decorator-based processors and named queues | `SharedQueueModule`, `QueueService`, `@JobProcessor()`                                |       ✅        |
+| [Redis](./src/redis/README.md)                 | `@lyrolab/nest-shared/redis`         | Low-level Redis configuration                                   | `SharedRedisModule`, `RedisConfig`                                                    |       ✅        |
 
 ## Quick Start
 
@@ -118,6 +120,9 @@ export class MyService {
 | `PORT`               |    ❌    | Bootstrap                 | App listen port (default: 3000)       |
 | `CACHE_TTL`          |    ❌    | Cache                     | Cache TTL in seconds                  |
 | `OPENROUTER_API_KEY` |    ✅    | AI                        | OpenRouter API key                    |
+| `OTEL_ENABLED`       |    ❌    | Observability             | `false` disables telemetry            |
+| `OTEL_EXPORTER_URL`  |    ❌    | Observability             | OTLP/gRPC collector endpoint          |
+| `APP_STAGE`          |    ❌    | Observability             | Deployment environment name           |
 | `NODE_ENV`           |    ❌    | All                       | Set to `test` for TestContainers mode |
 
 ## Development
