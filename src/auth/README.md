@@ -1,6 +1,6 @@
 # Auth Module — `@lyrolab/nest-shared/auth`
 
-JWT-based authentication module with Keycloak integration. Validates JWTs using a JWKS endpoint and provides decorators for route protection and user access.
+JWT-based authentication module with Keycloak integration. Validates JWTs using a JWKS endpoint, exposes Keycloak roles, provisions local users, and provides decorators for route protection and user access.
 
 ## What Is This?
 
@@ -11,6 +11,8 @@ A dynamic NestJS module that configures Passport with a JWT strategy backed by J
 - Verifies the token `issuer` and (when configured) `audience` claims
 - Provides `@Public()` to bypass auth on specific routes
 - Provides `@CurrentUser()` to extract authenticated user info
+- Reads Keycloak realm and client roles into `AuthUser.roles`, enforced with `@Roles()` and `RolesGuard`
+- Provisions local users keyed on `(issuer, subject)` with `createUserProvisioningGuard()`
 - Applies `JwtAuthGuard` globally — all routes are protected by default
 
 ## How Do I Use It?
@@ -143,6 +145,106 @@ export class ProfileController {
 
 The `JwtAuthGuard` is applied globally. It respects `@Public()` and additionally allows unauthenticated access to the exact `/health` probe.
 
+### 7. Protect Routes with Roles
+
+`AuthUser.roles` holds the token's `realm_access.roles` plus `resource_access[clientId].roles`
+for the configured `clientId`. Register `RolesGuard` after `JwtAuthGuard` and annotate
+routes or controllers with `@Roles()`. A caller needs **any one** of the listed roles;
+handler-level `@Roles()` overrides controller-level. Routes without `@Roles()` are
+unaffected, and a role-protected route without an authenticated user returns 403.
+
+```typescript
+import { APP_GUARD } from "@nestjs/core"
+import {
+  JwtAuthGuard,
+  Roles,
+  RolesGuard,
+  SharedAuthModule,
+} from "@lyrolab/nest-shared/auth"
+
+@Module({
+  imports: [
+    SharedAuthModule.forRoot({
+      ...keycloakConfig(url, realm),
+      audience: "my-backend",
+      clientId: "my-backend",
+    }),
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
+})
+export class AppModule {}
+
+@Controller("admin")
+export class AdminController {
+  @Roles("admin")
+  @Get()
+  dashboard() {}
+}
+```
+
+In dynamic mode, roles are read only from issuers whose `resolveIssuer` result sets
+`trustRoles: true` (with an optional per-issuer `clientId`). Every other issuer
+authenticates with `roles: []`, so a tenant-controlled IdP cannot mint application
+roles.
+
+### 8. Provision Local Users
+
+`createUserProvisioningGuard()` builds a guard that maps the verified caller to the
+app's own user record. The app implements `UserProvisioner`; the guard calls it with
+the caller's `ProvisioningIdentity` and writes the result to `request.dbUser` (or
+`requestProperty`).
+
+Users are keyed on **`(issuer, subject)`**: the same `sub` from two issuers is two
+users. The provisioner must look up and store both, never `subject` alone.
+
+```typescript
+import {
+  createUserProvisioningGuard,
+  JwtAuthGuard,
+  ProvisioningIdentity,
+  RolesGuard,
+  UserProvisioner,
+} from "@lyrolab/nest-shared/auth"
+
+@Injectable()
+export class AppUserProvisioner implements UserProvisioner<User> {
+  constructor(private readonly users: UserRepository) {}
+
+  provision({ issuer, subject, email, name }: ProvisioningIdentity) {
+    return this.users.findOrCreate({ issuer, subject }, { email, name })
+  }
+}
+
+@Module({
+  providers: [
+    AppUserProvisioner,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    {
+      provide: APP_GUARD,
+      useClass: createUserProvisioningGuard({
+        provisioner: AppUserProvisioner,
+        cacheTtlMs: 30_000,
+      }),
+    },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
+})
+export class AuthModule {}
+```
+
+- Nest runs global guards in registration order; register the provisioning guard
+  **after** `JwtAuthGuard`, since it trusts `request.user`.
+- Requests without `request.user` (public routes) pass through unprovisioned.
+- A caller without a verified issuer or subject, or a provisioner returning
+  `null`/`undefined`, is rejected with 401. Exceptions thrown by the provisioner
+  propagate, so it can refuse a user (e.g. an issuer no tenant owns).
+- `cacheTtlMs` caches provisioned users in `CACHE_MANAGER` (e.g. `SharedCacheModule`)
+  under an `(issuer, subject)` key. Cached values go through the cache store's
+  serialization, so with Redis they come back as plain objects, not entity instances.
+
 ## Configuration
 
 Options take one of two shapes. Both accept an optional `algorithms` allowlist
@@ -150,17 +252,35 @@ Options take one of two shapes. Both accept an optional `algorithms` allowlist
 
 **Static (single issuer):**
 
-| Option     | Type                 | Required | Description                              |
-| ---------- | -------------------- | :------: | ---------------------------------------- |
-| `jwksUri`  | `string`             |    ✅    | JWKS endpoint URL for key retrieval      |
-| `issuer`   | `string`             |    ✅    | Expected JWT issuer                      |
-| `audience` | `string \| string[]` |    —     | Expected JWT audience, verified when set |
+| Option     | Type                 | Required | Description                                               |
+| ---------- | -------------------- | :------: | --------------------------------------------------------- |
+| `jwksUri`  | `string`             |    ✅    | JWKS endpoint URL for key retrieval                       |
+| `issuer`   | `string`             |    ✅    | Expected JWT issuer                                       |
+| `audience` | `string \| string[]` |    —     | Expected JWT audience, verified when set                  |
+| `clientId` | `string`             |    —     | Client whose `resource_access` roles are added to `roles` |
 
 **Dynamic (multiple issuers):**
 
-| Option          | Type                                                                                   | Required | Description                                                          |
-| --------------- | -------------------------------------------------------------------------------------- | :------: | -------------------------------------------------------------------- |
-| `resolveIssuer` | `(iss: string) => Promise<{ jwksUri: string; audience?: string \| string[] } \| null>` |    ✅    | Maps a token's `iss` to its signing config; `null` rejects the token |
+| Option          | Type                                               | Required | Description                                                          |
+| --------------- | -------------------------------------------------- | :------: | -------------------------------------------------------------------- |
+| `resolveIssuer` | `(iss: string) => Promise<ResolvedIssuer \| null>` |    ✅    | Maps a token's `iss` to its signing config; `null` rejects the token |
+
+`ResolvedIssuer`:
+
+| Field        | Type                 | Required | Description                                                         |
+| ------------ | -------------------- | :------: | ------------------------------------------------------------------- |
+| `jwksUri`    | `string`             |    ✅    | JWKS endpoint of the issuer                                         |
+| `audience`   | `string \| string[]` |    —     | Expected audience, verified when set                                |
+| `trustRoles` | `boolean`            |    —     | Reads this issuer's roles into `AuthUser.roles` (default `false`)   |
+| `clientId`   | `string`             |    —     | Client whose `resource_access` roles are read when `trustRoles` set |
+
+**`createUserProvisioningGuard(options)`:**
+
+| Option            | Type             | Required | Description                                               |
+| ----------------- | ---------------- | :------: | --------------------------------------------------------- |
+| `provisioner`     | `InjectionToken` |    ✅    | Provider implementing `UserProvisioner`                   |
+| `requestProperty` | `string`         |    —     | Request property receiving the user (default `dbUser`)    |
+| `cacheTtlMs`      | `number`         |    —     | Caches provisioned users in `CACHE_MANAGER` for this long |
 
 ## Environment Variables
 
@@ -171,21 +291,27 @@ Options take one of two shapes. Both accept an optional `algorithms` allowlist
 
 ## Key Exports
 
-| Export                       | Type            | Description                                                        |
-| ---------------------------- | --------------- | ------------------------------------------------------------------ |
-| `SharedAuthModule`           | class           | Dynamic module with `forRoot()` / `forRootAsync()`                 |
-| `JwtAuthGuard`               | class           | Global auth guard (respects `@Public()`)                           |
-| `Public()`                   | decorator       | Marks a route as publicly accessible                               |
-| `CurrentUser()`              | param decorator | Injects `AuthUser` from JWT payload                                |
-| `AuthUser`                   | interface       | `{ id: string; email?: string; name?: string }`                    |
-| `JwtPayload`                 | interface       | Raw JWT payload shape                                              |
-| `keycloakConfig(url, realm)` | function        | Returns `{ jwksUri, issuer }` for Keycloak                         |
-| `AuthModuleOptions`          | type            | `StaticAuthOptions \| DynamicAuthOptions`                          |
-| `StaticAuthOptions`          | interface       | Single-issuer config `{ jwksUri, issuer, audience?, algorithms? }` |
-| `DynamicAuthOptions`         | interface       | Multi-issuer config `{ resolveIssuer, algorithms? }`               |
-| `ResolvedIssuer`             | interface       | `{ jwksUri: string; audience?: string \| string[] }`               |
-| `isDynamicAuthOptions`       | function        | Type guard distinguishing the two option shapes                    |
-| `AUTH_MODULE_OPTIONS`        | token           | Injection token for auth options                                   |
+| Export                                 | Type            | Description                                                                                |
+| -------------------------------------- | --------------- | ------------------------------------------------------------------------------------------ |
+| `SharedAuthModule`                     | class           | Dynamic module with `forRoot()` / `forRootAsync()`                                         |
+| `JwtAuthGuard`                         | class           | Global auth guard (respects `@Public()`)                                                   |
+| `Public()`                             | decorator       | Marks a route as publicly accessible                                                       |
+| `CurrentUser()`                        | param decorator | Injects `AuthUser` from JWT payload                                                        |
+| `AuthUser`                             | interface       | `{ id; email?; name?; issuer?; roles? }` — `issuer` and `roles` always set by the strategy |
+| `Roles(...roles)`                      | decorator       | Requires any one of the roles on a route or controller                                     |
+| `RolesGuard`                           | class           | Enforces `@Roles()`; register after `JwtAuthGuard`                                         |
+| `createUserProvisioningGuard(options)` | function        | Builds a guard provisioning users through a `UserProvisioner`                              |
+| `UserProvisioner`                      | interface       | `provision(identity: ProvisioningIdentity): Promise<TUser>`                                |
+| `ProvisioningIdentity`                 | interface       | `{ issuer; subject; email?; name?; roles }`                                                |
+| `provisioningCacheKey(iss, sub)`       | function        | Cache key used by the provisioning guard (for invalidation)                                |
+| `JwtPayload`                           | interface       | Raw JWT payload shape                                                                      |
+| `keycloakConfig(url, realm)`           | function        | Returns `{ jwksUri, issuer }` for Keycloak                                                 |
+| `AuthModuleOptions`                    | type            | `StaticAuthOptions \| DynamicAuthOptions`                                                  |
+| `StaticAuthOptions`                    | interface       | Single-issuer config `{ jwksUri, issuer, audience?, algorithms?, clientId? }`              |
+| `DynamicAuthOptions`                   | interface       | Multi-issuer config `{ resolveIssuer, algorithms? }`                                       |
+| `ResolvedIssuer`                       | interface       | `{ jwksUri; audience?; trustRoles?; clientId? }`                                           |
+| `isDynamicAuthOptions`                 | function        | Type guard distinguishing the two option shapes                                            |
+| `AUTH_MODULE_OPTIONS`                  | token           | Injection token for auth options                                                           |
 
 ## Related Modules
 

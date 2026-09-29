@@ -306,4 +306,123 @@ describe("JwtStrategy", () => {
       expect(outcome.result).toBe("fail")
     })
   })
+
+  describe("roles", () => {
+    const realmAndClientRoles = {
+      realm_access: { roles: ["user", "admin"] },
+      resource_access: {
+        boardbot: { roles: ["editor", "user"] },
+        "other-client": { roles: ["superuser"] },
+      },
+    }
+
+    const rolesOf = (outcome: Outcome) => {
+      if (outcome.result !== "success") throw new Error(outcome.result)
+      return (outcome.user as { roles: string[] }).roles
+    }
+
+    it("reads realm roles and the configured client's roles in static mode", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+        clientId: "boardbot",
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, realmAndClientRoles),
+      )
+      expect(rolesOf(outcome)).toEqual(["user", "admin", "editor"])
+    })
+
+    it("reads only realm roles when no client is configured", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, realmAndClientRoles),
+      )
+      expect(rolesOf(outcome)).toEqual(["user", "admin"])
+    })
+
+    it("returns no roles when the token carries none", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+      })
+      const outcome = await authenticate(strategy, sign(idpA, ISS_A))
+      expect(rolesOf(outcome)).toEqual([])
+    })
+
+    it("ignores malformed role claims", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+        clientId: "boardbot",
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, {
+          realm_access: { roles: "admin" },
+          resource_access: { boardbot: { roles: [42, "editor"] } },
+        }),
+      )
+      expect(rolesOf(outcome)).toEqual(["editor"])
+    })
+
+    it("exposes the verified issuer on the user", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+      })
+      const outcome = await authenticate(strategy, sign(idpA, ISS_A))
+      expect(outcome).toMatchObject({
+        result: "success",
+        user: { id: "user-1", issuer: ISS_A },
+      })
+    })
+
+    it("ignores roles from a dynamic issuer that is not trusted for roles", async () => {
+      const strategy = new JwtStrategy({
+        resolveIssuer: (iss) =>
+          iss === ISS_A
+            ? { jwksUri: jwksA.jwksUri, clientId: "boardbot" }
+            : null,
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, realmAndClientRoles),
+      )
+      expect(rolesOf(outcome)).toEqual([])
+    })
+
+    it("reads roles per issuer in dynamic mode", async () => {
+      const strategy = new JwtStrategy({
+        resolveIssuer: (iss) => {
+          if (iss === ISS_A) {
+            return {
+              jwksUri: jwksA.jwksUri,
+              trustRoles: true,
+              clientId: "boardbot",
+            }
+          }
+          if (iss === ISS_B) return { jwksUri: jwksB.jwksUri }
+          return null
+        },
+      })
+
+      const fromA = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, realmAndClientRoles),
+      )
+      const fromB = await authenticate(
+        strategy,
+        sign(idpB, ISS_B, realmAndClientRoles),
+      )
+
+      expect(rolesOf(fromA)).toEqual(["user", "admin", "editor"])
+      expect(rolesOf(fromB)).toEqual([])
+    })
+  })
 })
