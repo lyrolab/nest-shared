@@ -60,7 +60,7 @@ The module automatically configures itself based on the environment:
 
 ## TypeORM CLI Data Source
 
-`createCliDataSource(AppModule)` boots the application context, takes the `DataSource` configured by `SharedDatabaseModule`, closes the context and returns the data source for the TypeORM CLI to initialize. Entities and migrations therefore come from the same configuration as the running app.
+`createCliDataSource(AppModule)` builds the application's module graph without initializing it, takes the `DataSource` configured by `SharedDatabaseModule`, releases its connection and returns it for the TypeORM CLI to initialize. No lifecycle hook runs (`onModuleInit`, `onApplicationBootstrap`, `onModuleDestroy`, `beforeApplicationShutdown`, `onApplicationShutdown`), so startup jobs never fire during `db:migrate`. Entities and migrations therefore come from the same configuration as the running app.
 
 ```typescript
 // src/data-source.ts
@@ -70,7 +70,7 @@ import { AppModule } from "./app.module"
 export default createCliDataSource(AppModule)
 ```
 
-The context boots every module, so the CLI needs the same environment as the app (`DATABASE_URL`, `REDIS_URL`, …).
+Every provider is still instantiated, so the CLI needs the same environment as the app (`DATABASE_URL`, `REDIS_URL`, …) and `@nestjs/platform-express`.
 
 ### Script Convention
 
