@@ -1,94 +1,139 @@
-# Database Module
+# Database
 
-The database module provides a standardized way to connect to and interact with databases across our NestJS applications. It includes built-in support for test environments using TestContainers and production environments using PostgreSQL.
+`SharedDatabaseModule` connects Nest applications and test factories to PostgreSQL through TypeORM. Import it from `@lyrolab/nest-shared/database`.
 
-## Dependencies
+## Production
 
-The database module requires the following packages:
-
-```bash
-npm install @nestjs/config @nestjs/typeorm typeorm pg
-```
-
-## Features
-
-- Automatic test environment configuration using TestContainers
-- Production environment configuration using DATABASE_URL from ConfigService
-- Support for custom entities and migrations paths
-- Automatic database synchronization in test environment
-- Built-in test database cleanup utilities
-
-## Usage
-
-1. Import the database module in your `app.module.ts`:
-
-```typescript
-import { SharedDatabaseModule } from "@lyrolab/nest-shared/database"
-
-@Module({
-  imports: [
-    SharedDatabaseModule.forRoot({
-      // Optional: Specify custom paths for entities and migrations
-      entities: ["path/to/entities/**/*.entity{.ts,.js}"],
-      migrations: ["path/to/migrations/**/*.{ts,js}"],
-    }),
-  ],
-})
+```ts
+@Module({ imports: [ConfigModule.forRoot(), SharedDatabaseModule.forRoot()] })
 export class AppModule {}
 ```
 
-## Configuration
+`DATABASE_URL` comes from ConfigService. Production loads `dist/**/*.entity.{ts,js}` and `dist/migrations/**/*.{ts,js}` relative to the application entry path, disables synchronization, and enables Nest's `autoLoadEntities`. `forRoot({ entities, migrations })` accepts explicit paths. Production migrations use the application's normal TypeORM CLI lifecycle; see `createCliDataSource` in this entry point.
 
-The module automatically configures itself based on the environment:
+## Test server and identity
 
-### Test Environment (`NODE_ENV=test`)
+Tests require an **owned local PostgreSQL server**, an existing base database, and a user with CREATE DATABASE permission. The library does not start a container. Configure the normal `DATABASE_URL` before starting your runner; ConfigModule/ConfigService read it. Both Nest and factory connections use a separate database created by this execution context. They never clear or drop the base database.
 
-- Creates a PostgreSQL container using TestContainers
-- Automatically synchronizes the database schema
-- Provides utilities for database cleanup between tests
+Existing `forTest({ entities: [User] })` callers keep synchronized factory setup. Ordinary invocations initialize identity automatically. Names include a random invocation namespace, PID, and `VITEST_POOL_ID ?? JEST_WORKER_ID ?? "0"`. Names fit PostgreSQL's 63-byte bound, including UTF-8 prefixes. A collision fails without erasing or adopting the existing database.
 
-### Production Environment
+A runner can establish identity before importing application modules or factories:
 
-- Uses the DATABASE_URL from ConfigService
-- Disables automatic schema synchronization
-- Supports custom entities and migrations paths
+```ts
+import {
+  createTestDatabaseInvocation,
+  SharedDatabaseModule,
+} from "@lyrolab/nest-shared/database"
 
-## Environment Variables
-
-- `DATABASE_URL`: Required in production environment
-- `NODE_ENV`: Set to 'test' for test environment configuration
-
-## TypeORM CLI Data Source
-
-`createCliDataSource(AppModule)` builds the application's module graph without initializing it, takes the `DataSource` configured by `SharedDatabaseModule`, releases its connection and returns it for the TypeORM CLI to initialize. No lifecycle hook runs (`onModuleInit`, `onApplicationBootstrap`, `onModuleDestroy`, `beforeApplicationShutdown`, `onApplicationShutdown`), so startup jobs never fire during `db:migrate`. Entities and migrations therefore come from the same configuration as the running app.
-
-```typescript
-// src/data-source.ts
-import { createCliDataSource } from "@lyrolab/nest-shared/database"
-import { AppModule } from "./app.module"
-
-export default createCliDataSource(AppModule)
+// The runner host may pass this value to all its worker contexts.
+const invocation = createTestDatabaseInvocation()
+SharedDatabaseModule.initializeTestInvocation(invocation)
+const { TestAppModule } = await import("./test-app.module")
 ```
 
-Every provider is still instantiated, so the CLI needs the same environment as the app (`DATABASE_URL`, `REDIS_URL`, …) and `@nestjs/platform-express`.
+Initialize each worker with the shared token before its application imports. PID and worker ID still distinguish its database. Repeat initialization returns the same token; a different token requires successful reset. Separate Jest module realms automatically isolate themselves; sharing a token also gives them a common invocation namespace. No URL is computed at module import time.
 
-### Script Convention
+`getTestDatabaseInfo(configService?)` returns a frozen `{ namespace, processId, workerId, databaseName }` without connection credentials. It captures DATABASE_URL once. A different URL in that context fails. Standalone setup accepts a ConfigService; Nest supplies its injected service. Both must resolve the same URL.
 
-Every backend exposes the same database scripts in its `package.json`:
+## Schema options
 
-```json
-{
-  "scripts": {
-    "typeorm": "typeorm-ts-node-commonjs -d ./src/data-source.ts",
-    "db:migrate": "npm run build && npm run typeorm -- migration:run",
-    "db:generate": "npm run typeorm -- migration:generate ./src/migrations/$npm_config_name && eslint src/migrations/*-$npm_config_name.ts --fix",
-    "db:seed": "ts-node -r tsconfig-paths/register src/seed/seed.ts"
+Import the real module in the application's test composition:
+
+```ts
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    SharedDatabaseModule.forTest({ entities: [User, Message] }),
+  ],
+})
+export class TestAppModule {}
+```
+
+`ForTestOptions.entities` accepts TypeORM entity classes, EntitySchema values, explicit discovery paths, or a TypeORM selection map. Include all relation targets. Choose source **or** compiled paths so TypeORM does not discover both versions of an entity. The factory gets exactly the same metadata selection as Nest; `autoLoadEntities` does not populate the separate factory.
+
+For a migration-backed schema:
+
+```ts
+SharedDatabaseModule.forTest({
+  entities: [join(__dirname, "**/*.entity.ts")],
+  migrations: [InitialSchema1700000000000],
+  migrationsRun: true,
+  migrationsTableName: "migrations",
+  migrationsTransactionMode: "all",
+})
+```
+
+The factory runs migrations once with synchronization disabled. Nest never synchronizes or reruns migrations. `migrationsRun: true` requires a nonempty migration selection and rejects explicit `synchronize: true` before creating a database. Without migration execution, synchronization defaults to true; `synchronize: false` is supported. `schema` and `namingStrategy` are forwarded to both owners, along with the migration options. `entities` remains required.
+
+Equivalent registrations are allowed. Changing options requires `resetTestDatabase()` after cleanup. Call `setupTestDatabase(configService?)` before using factories, or compile Nest and let the module await setup. Concurrent setup calls share the same work. `getTestDataSource()` returns the factory's DataSource only after successful setup.
+
+## Clear and teardown
+
+`clearTestDatabase()` truncates ordinary entity and junction tables, with quoted schema/table identifiers. Views and migration history are excluded. Migration-only tables without entity metadata are outside automatic fixture clearing. Foreign-database metadata is rejected. Calling clear before setup is harmless.
+
+Finish app work and close every Nest application or testing context before releasing the database. Nest's test lifecycle hook reports destroy failures. Explicit `closeTestConnection()` attempts every tracked owner and admin pool, then drops the successfully created database only after all owners close and its catalog OID matches. It uses ordinary DROP; another open connection makes cleanup reject. It never terminates sessions or uses FORCE.
+
+Always attempt explicit cleanup even after setup, test, or app shutdown fails:
+
+```ts
+const apps: TestingModule[] = []
+const errors: unknown[] = []
+try {
+  await SharedDatabaseModule.setupTestDatabase()
+  const app = await Test.createTestingModule({
+    imports: [TestAppModule],
+  }).compile()
+  apps.push(app)
+  await runTests(app, SharedDatabaseModule.getTestDataSource())
+} catch (error) {
+  errors.push(error)
+} finally {
+  for (const app of apps) {
+    try {
+      await app.close()
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+  try {
+    await SharedDatabaseModule.closeTestConnection()
+  } catch (error) {
+    errors.push(error)
   }
 }
+if (errors.length === 1) throw errors[0]
+if (errors.length > 1)
+  throw new AggregateError(errors, "Test and cleanup failed")
 ```
 
-| Script        | Purpose                                                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------------------------ |
-| `db:migrate`  | Runs pending migrations. Builds first because `SharedDatabaseModule` loads migrations from `dist/migrations` |
-| `db:generate` | Generates a migration from the entity diff: `npm run db:generate --name=add-user-email`                      |
-| `db:seed`     | Inserts development fixtures; must refuse to run against production                                          |
+Successful close is idempotent and invalidates `getTestDataSource()`. Setup can then recreate the database with the recorded options and identity. Cleanup failures retain state for retry and block new setup. `resetTestDatabase()` performs full cleanup, then forgets the options, URL, and invocation. It rejects without forgetting state if cleanup fails. Setup, clear, close, and reset reject incompatible overlapping operations; wait for the active operation before retrying.
+
+An interrupted process can leave its database behind. The library does not scan for or reclaim abandoned databases. A replacement database with another OID is preserved and cleanup fails. Report that ownership failure; only the server owner can decide how to remove external data. Do not force runner exits or suppress cleanup errors.
+
+## Library verification
+
+Install with `npm ci` from the repository root. Docker and Node.js are required for this recipe. It creates a fresh PostgreSQL 16 container with an automatically assigned local port. Keep the returned container ID in the same shell; shutdown targets only that container.
+
+```bash
+npm ci
+verification_container=$(docker run -d -e POSTGRES_PASSWORD=local -e POSTGRES_DB=verification -p 127.0.0.1::5432 postgres:16)
+cleanup_verification() { docker rm -f "$verification_container"; }
+trap cleanup_verification EXIT
+for attempt in $(seq 1 60); do
+  if docker exec "$verification_container" pg_isready -U postgres -d verification; then break; fi
+  sleep 1
+done
+docker exec "$verification_container" pg_isready -U postgres -d verification || exit 1
+verification_port=$(docker port "$verification_container" 5432/tcp | cut -d: -f2)
+export DATABASE_URL="postgres://postgres:local@127.0.0.1:$verification_port/verification"
+npm test -- --runInBand
+npm run build
+npm run lint
+# End this shell or run the owner-only shutdown explicitly:
+cleanup_verification
+trap - EXIT
+```
+
+You can also supply DATABASE_URL for a healthy local server with CREATE DATABASE permission. The integration harness creates its own unique fixture base; it never writes fixtures into the supplied base database. `RUNNER_TEMP` selects evidence storage when supplied; otherwise evidence goes under `.cache/nest-shared-tests`. No orchestration identity or variables are required.
+
+`npm test` visibly skips the real-server suite when DATABASE_URL is absent. For just database acceptance, use `npm test -- --runInBand src/database`. CI provides its own PostgreSQL service. The suite covers real migrations and discovery, concurrent ordinary Jest commands, actual multiple workers, sentinel preservation, both connection owners, and natural passing/failing exits. Child evidence records names, identities, commands, exit status, and cleanup; fixture code is excluded from the published build.

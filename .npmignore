@@ -21,3 +21,5 @@ docker-compose.yml
 .circleci/
 .husky/
 .nvmrc
+
+/.cache/nest-shared-tests/
