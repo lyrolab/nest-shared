@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
 } from "typeorm"
 
-@Entity({ name: 'person"record', schema: "fixtures" })
+@Entity({ name: "person record", schema: "fixtures" })
 export class Person {
   @PrimaryGeneratedColumn()
   id!: number
@@ -40,3 +40,17 @@ export const Note = new EntitySchema<{ id: number; text: string }>({
     text: { type: String },
   },
 })
+
+export const QuotedRecord = new EntitySchema<{ id: number }>({
+  name: "QuotedRecord",
+  tableName: 'quote"record',
+  columns: { id: { type: Number, primary: true } },
+})
+
+@Entity({ name: "entry" })
+export class Entry {
+  @PrimaryGeneratedColumn()
+  id!: number
+  @Column()
+  text!: string
+}

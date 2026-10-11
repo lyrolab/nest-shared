@@ -6,15 +6,15 @@
 
 ## 2. Owned setup and schema
 
-- [ ] 2.1 Replace destructive setup with absent-only CREATE and successful-create/OID ownership tracking. Close admin sources on all paths and preserve primary/cleanup errors. Verify collision preservation and failures before/after CREATE at the DataSource boundary.
-- [ ] 2.2 Initialize the factory with TypeORM entities/discovery/schema/naming options and explicit migration settings; reject invalid migration/synchronization combinations before CREATE. Verify compatible class-list synchronization and a real migration with synchronize false.
-- [ ] 2.3 Wire forTest as a real Nest module using ConfigService, forRootAsync, and dataSourceFactory. Await the same setup promise and track Nest sources before initialization. Verify factory/Nest current_database and metadata match through actual repositories and relation/junction fixtures.
+- [x] 2.1 Replace destructive setup with absent-only CREATE and successful-create/OID ownership tracking. Close admin sources on all paths and preserve primary/cleanup errors. Verify collision preservation and failures before/after CREATE at the DataSource boundary.
+- [x] 2.2 Initialize the factory with TypeORM entities/discovery/schema/naming options and explicit migration settings; reject invalid migration/synchronization combinations before CREATE. Verify compatible class-list synchronization and a real migration with synchronize false.
+- [x] 2.3 Wire forTest as a real Nest module using ConfigService, forRootAsync, and dataSourceFactory. Await the same setup promise and track Nest sources before initialization. Verify factory/Nest current_database and metadata match through actual repositories and relation/junction fixtures.
 
 ## 3. Clear, close, and reset
 
-- [ ] 3.1 Guard clear by active ownership/current database and quote schema/table identifiers. Truncate owned ordinary entity/junction tables, excluding views/history; reject foreign database metadata. Verify sentinel/history preservation and schema-qualified clearing.
-- [ ] 3.2 Add the test-only beforeApplicationShutdown provider to propagate Nest destroy errors. Implement complete closeTestConnection for all tracked owners and owned DROP after confirmed closure, with admin finally cleanup and retryable failure state. Verify app shutdown, partial compilation, both owners, and destroy/drop failures.
-- [ ] 3.3 Implement resetTestDatabase and lifecycle serialization/rejection. Clear static references only on successful cleanup. Verify getTestDataSource before/after lifecycle, repeated close/setup/reset, failed reset, and setup/teardown overlap without leaked pools.
+- [x] 3.1 Guard clear by active ownership/current database and quote schema/table identifiers. Truncate owned ordinary entity/junction tables, excluding views/history; reject foreign database metadata. Verify sentinel/history preservation and schema-qualified clearing.
+- [x] 3.2 Add the test-only beforeApplicationShutdown provider to propagate Nest destroy errors. Implement complete closeTestConnection for all tracked owners and owned DROP after confirmed closure, with admin finally cleanup and retryable failure state. Verify app shutdown, partial compilation, both owners, and destroy/drop failures.
+- [x] 3.3 Implement resetTestDatabase and lifecycle serialization/rejection. Clear static references only on successful cleanup. Verify getTestDataSource before/after lifecycle, repeated close/setup/reset, failed reset, and setup/teardown overlap without leaked pools.
 
 ## 4. Real PostgreSQL boundary coverage
 
@@ -25,7 +25,7 @@
 
 ## 5. Documentation and stage verification
 
-- [ ] 5.1 Write the current database README with the public API, owned-server permissions, ConfigService/DATABASE_URL, pre-import/shared-token recipe, explicit migration/discovery examples, metadata limits, both owners, cleanup/error aggregation, and reset/compatibility behavior. Verify examples against exported types and the fixture runner.
+- [x] 5.1 Write the current database README with the public API, owned-server permissions, ConfigService/DATABASE_URL, pre-import/shared-token recipe, explicit migration/discovery examples, metadata limits, both owners, cleanup/error aggregation, and reset/compatibility behavior. Verify examples against exported types and the fixture runner.
 - [ ] 5.2 Run focused database/CLI tests, npm test against the owned server, npm run build, and npm run lint; keep hooks enabled. Record exact commands and tested commit/input hashes. Inspect the final diff to verify production forRoot/migrations, CLI hooks, auth/JWT/session wiring, and LLM prompt/token behavior retain their contracts.
 - [ ] 5.3 Keep the same issue/branch/PR. Push implementation and evidence, mark apply complete in the PR body, and hand to Simplifier with sensitive surfaces explicit. Reviewer must archive completed OpenSpec artifacts on this branch where possible, merge under standing policy, and return the open issue to Founding Engineer for actual publication verification.
 

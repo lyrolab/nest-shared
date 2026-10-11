@@ -1,5 +1,6 @@
-import { ConfigService } from "@nestjs/config"
-import { DataSource } from "typeorm"
+import { ConfigModule, ConfigService } from "@nestjs/config"
+import { Test } from "@nestjs/testing"
+import { DataSource, EntitySchema } from "typeorm"
 import {
   createTestDatabaseInvocation,
   SharedDatabaseModule as Database,
@@ -98,6 +99,45 @@ describe("test database public API", () => {
     )
   })
 
+  it("isolates reloaded module realms and accepts a shared pre-import token", () => {
+    const token = createTestDatabaseInvocation()
+    const names: string[] = []
+    const defaults: string[] = []
+    for (let i = 0; i < 2; i++) {
+      jest.isolateModules(() => {
+        const module = jest.requireActual<typeof import("./index")>("./index")
+        defaults.push(
+          module.SharedDatabaseModule.initializeTestInvocation().namespace,
+        )
+      })
+      jest.isolateModules(() => {
+        const module = jest.requireActual<typeof import("./index")>("./index")
+        module.SharedDatabaseModule.initializeTestInvocation(token)
+        names.push(
+          module.SharedDatabaseModule.getTestDatabaseInfo(config())
+            .databaseName,
+        )
+      })
+    }
+    expect(defaults[0]).not.toBe(defaults[1])
+    expect(names[0]).toBe(names[1])
+  })
+
+  it("hashes the full base even when readable prefixes match", async () => {
+    const token = createTestDatabaseInvocation()
+    Database.initializeTestInvocation(token)
+    const a = Database.getTestDatabaseInfo(
+      config("a".repeat(100) + "x"),
+    ).databaseName
+    await Database.resetTestDatabase()
+    Database.initializeTestInvocation(token)
+    const b = Database.getTestDatabaseInfo(
+      config("a".repeat(100) + "y"),
+    ).databaseName
+    expect(a.slice(0, 25)).toBe(b.slice(0, 25))
+    expect(a).not.toBe(b)
+  })
+
   it("rejects conflicting options and invalid migration settings before any connection", () => {
     const initialize = jest.spyOn(DataSource.prototype, "initialize")
     Database.forTest({ entities: [] })
@@ -174,6 +214,93 @@ describe("test database public API", () => {
     expect(Database.initializeTestInvocation().namespace).not.toBe(namespace)
   })
 
+  it("keeps production configuration and discovery contracts", async () => {
+    mockBoundary()
+    const app = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          ignoreEnvFile: true,
+          load: [() => ({ DATABASE_URL: baseUrl })],
+        }),
+        Database.forRoot({
+          entities: ["dist/entities/*.js"],
+          migrations: ["dist/migrations/*.js"],
+        }),
+      ],
+    }).compile()
+    try {
+      expect(app.get<DataSource>(DataSource).options).toMatchObject({
+        type: "postgres",
+        url: baseUrl,
+        entities: ["dist/entities/*.js"],
+        migrations: ["dist/migrations/*.js"],
+        synchronize: false,
+        autoLoadEntities: true,
+      })
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("clears schema-qualified tables while excluding views/history and rejects foreign metadata", async () => {
+    const { query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    const source = Database.getTestDataSource()
+    const selection = [
+      new EntitySchema({
+        name: "Quoted",
+        tableName: 'table"name',
+        schema: 'schema"name',
+        columns: { id: { type: Number, primary: true } },
+      }),
+      new EntitySchema({
+        name: "View",
+        type: "view",
+        expression: "SELECT 1 AS id",
+        columns: { id: { type: Number } },
+      }),
+      new EntitySchema({
+        name: "History",
+        tableName: "migrations",
+        columns: { id: { type: Number, primary: true } },
+      }),
+    ]
+    const metadataSource = new DataSource({
+      type: "postgres",
+      entities: selection,
+    })
+    class MetadataSource extends DataSource {
+      async build(): Promise<void> {
+        await this.buildMetadatas()
+      }
+    }
+    const built = new MetadataSource(metadataSource.options)
+    await built.build()
+    Object.defineProperty(source, "entityMetadatas", {
+      value: built.entityMetadatas,
+    })
+    await Database.clearTestDatabase()
+    expect(query).toHaveBeenLastCalledWith(
+      'TRUNCATE TABLE "schema""name"."table""name" CASCADE',
+    )
+    source.entityMetadatas[0].database = "development"
+    await expect(Database.clearTestDatabase()).rejects.toThrow(
+      "foreign database",
+    )
+  })
+
+  it("reports an admin initialization failure without attempting CREATE", async () => {
+    const { initialize, query, sources } = mockBoundary()
+    initialize.mockRejectedValueOnce(new Error("admin initialize failed"))
+    Database.forTest({ entities: [] })
+    await expect(Database.setupTestDatabase(config())).rejects.toThrow(
+      "admin initialize failed",
+    )
+    expect(query).not.toHaveBeenCalled()
+    expect(sources).toHaveLength(0)
+  })
+
   it("preserves a collision without adopting or dropping it", async () => {
     const { query, sources } = mockBoundary()
     query.mockRejectedValueOnce(new Error("database already exists"))
@@ -236,6 +363,20 @@ describe("test database public API", () => {
     ).toBe(false)
     await Database.resetTestDatabase()
     expect(factory.isInitialized).toBe(false)
+  })
+
+  it("retains owners that report success without closing", async () => {
+    const { destroy, query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    destroy.mockResolvedValueOnce(undefined)
+    await expect(Database.closeTestConnection()).rejects.toThrow(
+      "did not close",
+    )
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
+    ).toBe(false)
+    await Database.resetTestDatabase()
   })
 
   it("refuses changed OIDs and retains state for retry", async () => {

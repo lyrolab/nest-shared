@@ -4,4 +4,6 @@ declare global {
   const invocation: TestDatabaseInvocation
 }
 
-SharedDatabaseModule.initializeTestInvocation(invocation)
+SharedDatabaseModule.initializeTestInvocation(
+  typeof invocation === "undefined" ? undefined : invocation,
+)

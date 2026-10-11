@@ -9,12 +9,16 @@ import {
   SharedDatabaseModule as Database,
   TestDatabaseInfo,
 } from "./index"
-import { Person, Tag, Note } from "./fixtures/records.entity"
-import { FixtureSchema1700000000000 } from "./fixtures/schema.migration"
+import { Person, Tag, Note, Entry } from "./fixtures/records.entity"
 
 const environment = new ConfigService()
 const databaseUrl = environment.get<string>("DATABASE_URL")
 const integration = databaseUrl ? describe : describe.skip
+function targetUrl(base: string, name: string) {
+  const url = new URL(base)
+  url.pathname = `/${encodeURIComponent(name)}`
+  return url.toString()
+}
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
 
 integration("owned PostgreSQL public boundary", () => {
@@ -24,6 +28,7 @@ integration("owned PostgreSQL public boundary", () => {
   const children = new Set<ChildProcess>()
   const evidence: unknown[] = []
   const externalDatabases = new Set<string>()
+  let initialCatalog: { datname: string }[]
 
   beforeAll(async () => {
     if (
@@ -41,6 +46,9 @@ integration("owned PostgreSQL public boundary", () => {
       url: databaseUrl,
       database: decodeURIComponent(new URL(databaseUrl).pathname.slice(1)),
     }).initialize()
+    initialCatalog = await admin.query<{ datname: string }[]>(
+      "SELECT datname FROM pg_database ORDER BY datname",
+    )
     await admin.query(
       "CREATE TABLE IF NOT EXISTS public.base_sentinel (id integer PRIMARY KEY)",
     )
@@ -76,6 +84,11 @@ integration("owned PostgreSQL public boundary", () => {
           "SELECT id FROM public.base_sentinel",
         ),
       ).toEqual([{ id: 1 }])
+      const catalog = await admin.query<{ datname: string }[]>(
+        "SELECT datname FROM pg_database ORDER BY datname",
+      )
+      expect(catalog).toEqual(initialCatalog)
+      evidence.push({ finalCatalog: catalog, baseSentinel: "preserved" })
       await writeFile(
         join(scratch, "evidence.json"),
         JSON.stringify(evidence, null, 2),
@@ -114,7 +127,7 @@ integration("owned PostgreSQL public boundary", () => {
   it("runs a real migration with TypeORM discovery and complete repository/junction metadata", async () => {
     const { factory, nest } = await compile({
       entities: [join(__dirname, "fixtures/records.entity.ts")],
-      migrations: [FixtureSchema1700000000000],
+      migrations: [join(__dirname, "fixtures/schema.migration.ts")],
       migrationsRun: true,
       migrationsTableName: "fixture_history",
       migrationsTransactionMode: "all",
@@ -129,7 +142,16 @@ integration("owned PostgreSQL public boundary", () => {
       ).toEqual([{ name: info.databaseName }])
       expect(
         source.entityMetadatas.map((meta) => meta.tableName).sort(),
-      ).toEqual(["note", 'person"record', "person_tags", "tag"].sort())
+      ).toEqual(
+        [
+          "note",
+          "person record",
+          "person_tags",
+          "tag",
+          'quote"record',
+          "entry",
+        ].sort(),
+      )
     }
     expect(nest.options.migrationsRun).toBe(false)
     await factory
@@ -141,7 +163,13 @@ integration("owned PostgreSQL public boundary", () => {
     expect(people[0].tags[0].name).toBe("friend")
     await nest.getRepository(Note).save({ text: "note" })
     expect(await factory.getRepository(Note).count()).toBe(1)
+    await factory.query('INSERT INTO public."quote""record" VALUES (1)')
     await Database.clearTestDatabase()
+    expect(
+      await factory.query<{ count: string }[]>(
+        'SELECT count(*) FROM public."quote""record"',
+      ),
+    ).toEqual([{ count: "0" }])
     expect(await nest.getRepository(Person).count()).toBe(0)
     expect(await factory.getRepository(Tag).count()).toBe(0)
     expect(
@@ -173,7 +201,9 @@ integration("owned PostgreSQL public boundary", () => {
   })
 
   it("keeps class-list and EntitySchema callers synchronized and supports repeat setup", async () => {
-    const { factory, nest } = await compile({ entities: [Person, Tag, Note] })
+    const { factory, nest } = await compile({
+      entities: [Entry, Note],
+    })
     await nest.getRepository(Note).save({ text: "compatible" })
     expect(await factory.getRepository(Note).count()).toBe(1)
     const info = Database.getTestDatabaseInfo()
@@ -194,8 +224,7 @@ integration("owned PostgreSQL public boundary", () => {
     externalDatabases.add(info.databaseName)
     const other = await new DataSource({
       type: "postgres",
-      url: databaseUrl,
-      database: info.databaseName,
+      url: targetUrl(databaseUrl!, info.databaseName),
     }).initialize()
     try {
       await other.query("CREATE TABLE sentinel (id integer)")
@@ -218,8 +247,7 @@ integration("owned PostgreSQL public boundary", () => {
     const info = Database.getTestDatabaseInfo()
     const other = await new DataSource({
       type: "postgres",
-      url: databaseUrl,
-      database: info.databaseName,
+      url: targetUrl(databaseUrl!, info.databaseName),
     }).initialize()
     try {
       await expect(Database.resetTestDatabase()).rejects.toThrow(
@@ -266,9 +294,18 @@ integration("owned PostgreSQL public boundary", () => {
     },
   )
 
-  async function waitForFile(path: string, limit = 60000): Promise<void> {
+  async function waitForFile(
+    path: string,
+    run: Awaited<ReturnType<typeof childRun>>,
+    limit = 60000,
+  ): Promise<void> {
     const deadline = Date.now() + limit
     while (Date.now() < deadline) {
+      const ended = run.result()
+      if (ended)
+        throw new Error(
+          `Child exited before readiness (${ended.code}): ${ended.output}`,
+        )
       try {
         await access(path)
         return
@@ -295,7 +332,7 @@ integration("owned PostgreSQL public boundary", () => {
       testEnvironment: "node",
       setupFiles: [join(__dirname, "fixtures/initialize.ts")],
       globals: {
-        invocation: createTestDatabaseInvocation(),
+        ...(count > 1 ? { invocation: createTestDatabaseInvocation() } : {}),
         scenario: { directory, mode },
       },
       cacheDirectory: join(scratch, "jest-cache"),
@@ -319,6 +356,7 @@ integration("owned PostgreSQL public boundary", () => {
     child.stderr.on("data", (chunk: Buffer) => {
       output += chunk.toString()
     })
+    let completed: { code: number | null; output: string } | undefined
     const completion = new Promise<{ code: number | null; output: string }>(
       (resolveExit, reject) => {
         const timer = setTimeout(() => {
@@ -333,11 +371,14 @@ integration("owned PostgreSQL public boundary", () => {
           clearTimeout(timer)
           children.delete(child)
           if (signal) reject(new Error(`Child received ${signal}: ${output}`))
-          else resolveExit({ code, output })
+          else {
+            completed = { code, output }
+            resolveExit(completed)
+          }
         })
       },
     )
-    return { directory, completion, args, count, mode }
+    return { directory, completion, args, count, mode, result: () => completed }
   }
 
   async function verifyChild(
@@ -363,16 +404,16 @@ integration("owned PostgreSQL public boundary", () => {
         ),
       ) as { factoryClosed: boolean; nestClosed: boolean }
       expect(closed).toMatchObject({ factoryClosed: true, nestClosed: true })
-      if (run.mode === "replacement") {
+      if (run.mode === "replacement" || run.mode === "oid-fail") {
         const other = await new DataSource({
           type: "postgres",
-          url: databaseUrl,
-          database: identity.databaseName,
+          url: targetUrl(databaseUrl!, identity.databaseName),
         }).initialize()
         try {
-          expect(
-            await other.query<{ id: number }[]>("SELECT id FROM sentinel"),
-          ).toEqual([{ id: 7 }])
+          if (run.mode === "replacement")
+            expect(
+              await other.query<{ id: number }[]>("SELECT id FROM sentinel"),
+            ).toEqual([{ id: 7 }])
         } finally {
           await other.destroy()
         }
@@ -381,6 +422,8 @@ integration("owned PostgreSQL public boundary", () => {
       await absent(identity.databaseName)
       identities.push(identity)
     }
+    if (run.mode.endsWith("fail"))
+      expect(result.output).toMatch(/intentional|cleanup failed/i)
     evidence.push({
       mode: run.mode,
       command: [process.execPath, ...run.args],
@@ -394,7 +437,7 @@ integration("owned PostgreSQL public boundary", () => {
   it("isolates two concurrent ordinary invocations while one holds a sentinel", async () => {
     const a = await childRun("hold")
     try {
-      await waitForFile(join(a.directory, "worker-0.spec.ts.ready.json"))
+      await waitForFile(join(a.directory, "worker-0.spec.ts.ready.json"), a)
       const b = await childRun("pass")
       const bInfo = await verifyChild(b, 0)
       await writeFile(join(a.directory, "release"), "release")
@@ -411,7 +454,10 @@ integration("owned PostgreSQL public boundary", () => {
     try {
       await Promise.all(
         [0, 1].map((i) =>
-          waitForFile(join(run.directory, `worker-${i}.spec.ts.ready.json`)),
+          waitForFile(
+            join(run.directory, `worker-${i}.spec.ts.ready.json`),
+            run,
+          ),
         ),
       )
       await writeFile(join(run.directory, "release"), "release")
@@ -430,6 +476,9 @@ integration("owned PostgreSQL public boundary", () => {
     "setup-fail",
     "compile-fail",
     "teardown-fail",
+    "oid-fail",
+    "admin-destroy-fail",
+    "factory-destroy-fail",
   ] as const)(
     "exits naturally and cleans both owners for %s",
     async (mode) => {

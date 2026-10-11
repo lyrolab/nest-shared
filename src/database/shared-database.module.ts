@@ -56,13 +56,19 @@ function throwErrors(errors: unknown[], message: string): void {
   if (errors.length > 1) throw new AggregateError(errors, message)
 }
 
+async function closeSource(source: DataSource): Promise<void> {
+  if (source.isInitialized) await source.destroy()
+  if (source.isInitialized)
+    throw new Error("Test database connection did not close")
+}
+
 @Injectable()
 class TestDatabaseShutdown implements BeforeApplicationShutdown {
   constructor(private readonly dataSource: DataSource) {}
 
   async beforeApplicationShutdown(): Promise<void> {
     // TypeOrmModule's later shutdown hook logs destroy errors instead of rejecting.
-    if (this.dataSource.isInitialized) await this.dataSource.destroy()
+    await closeSource(this.dataSource)
   }
 }
 
@@ -195,7 +201,17 @@ export class SharedDatabaseModule {
         "Test database options changed; call resetTestDatabase first",
       )
     }
-    this.testOptions = { ...options }
+    const captured = { ...options }
+    captured.entities = Array.isArray(options.entities)
+      ? [...options.entities]
+      : { ...options.entities }
+    if (options.migrations)
+      captured.migrations = Array.isArray(options.migrations)
+        ? [...options.migrations]
+        : { ...options.migrations }
+    Object.freeze(captured.entities)
+    if (captured.migrations) Object.freeze(captured.migrations)
+    this.testOptions = Object.freeze(captured)
     return {
       module: SharedDatabaseModule,
       imports: [
@@ -308,7 +324,7 @@ export class SharedDatabaseModule {
       errors.push(error)
     } finally {
       try {
-        if (source.isInitialized) await source.destroy()
+        await closeSource(source)
         this.admins.delete(source)
       } catch (error) {
         errors.push(error)
@@ -411,7 +427,7 @@ export class SharedDatabaseModule {
     for (const sources of [this.sources, this.admins]) {
       for (const source of sources) {
         try {
-          if (source.isInitialized) await source.destroy()
+          await closeSource(source)
           sources.delete(source)
         } catch (error) {
           errors.push(error)
