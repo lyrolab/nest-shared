@@ -112,4 +112,28 @@ An interrupted process can leave its database behind. The library does not scan 
 
 ## Library verification
 
-`npm test` visibly skips the real-server suite when DATABASE_URL is absent. To run all database acceptance tests, start an owned PostgreSQL server and provide DATABASE_URL to `npm test -- --runInBand src/database`. CI provides its own PostgreSQL service. The suite covers real migrations and discovery, concurrent ordinary Jest commands, actual multiple workers, sentinel preservation, both connection owners, and natural passing/failing exits. Child evidence records names, identities, commands, exit status, and cleanup; fixture code is excluded from the published build.
+Install with `npm ci` from the repository root. Docker and Node.js are required for this recipe. It creates a fresh PostgreSQL 16 container with an automatically assigned local port. Keep the returned container ID in the same shell; shutdown targets only that container.
+
+```bash
+npm ci
+verification_container=$(docker run -d -e POSTGRES_PASSWORD=local -e POSTGRES_DB=verification -p 127.0.0.1::5432 postgres:16)
+cleanup_verification() { docker rm -f "$verification_container"; }
+trap cleanup_verification EXIT
+for attempt in $(seq 1 60); do
+  if docker exec "$verification_container" pg_isready -U postgres -d verification; then break; fi
+  sleep 1
+done
+docker exec "$verification_container" pg_isready -U postgres -d verification || exit 1
+verification_port=$(docker port "$verification_container" 5432/tcp | cut -d: -f2)
+export DATABASE_URL="postgres://postgres:local@127.0.0.1:$verification_port/verification"
+npm test -- --runInBand
+npm run build
+npm run lint
+# End this shell or run the owner-only shutdown explicitly:
+cleanup_verification
+trap - EXIT
+```
+
+You can also supply DATABASE_URL for a healthy local server with CREATE DATABASE permission. The integration harness creates its own unique fixture base; it never writes fixtures into the supplied base database. `RUNNER_TEMP` selects evidence storage when supplied; otherwise evidence goes under `.cache/nest-shared-tests`. No orchestration identity or variables are required.
+
+`npm test` visibly skips the real-server suite when DATABASE_URL is absent. For just database acceptance, use `npm test -- --runInBand src/database`. CI provides its own PostgreSQL service. The suite covers real migrations and discovery, concurrent ordinary Jest commands, actual multiple workers, sentinel preservation, both connection owners, and natural passing/failing exits. Child evidence records names, identities, commands, exit status, and cleanup; fixture code is excluded from the published build.

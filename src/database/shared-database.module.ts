@@ -89,6 +89,7 @@ export class SharedDatabaseModule {
   private static setupPromise?: Promise<void>
   private static busy?: "setup" | "clear" | "close"
   private static initializing = 0
+  private static cleanupRequired = false
 
   static forRoot(options: SharedDatabaseModuleOptions = {}): DynamicModule {
     return {
@@ -191,6 +192,8 @@ export class SharedDatabaseModule {
   static forTest(options: ForTestOptions): DynamicModule {
     this.initializeTestInvocation()
     if (this.busy) throw new Error(`Test database is busy: ${this.busy}`)
+    if (this.cleanupRequired)
+      throw new Error("Test database cleanup must succeed before setup")
     if (
       options.migrationsRun &&
       (options.synchronize === true ||
@@ -233,7 +236,11 @@ export class SharedDatabaseModule {
             }
           },
           dataSourceFactory: async (options) => {
-            if (this.busy || !this.testDataSource?.isInitialized)
+            if (
+              this.busy ||
+              this.cleanupRequired ||
+              !this.testDataSource?.isInitialized
+            )
               throw new Error("Test database is not ready for Nest")
             const source = new DataSource(options as DataSourceOptions)
             this.sources.add(source)
@@ -271,6 +278,8 @@ export class SharedDatabaseModule {
     if (!this.testOptions)
       throw new Error("Call forTest before setupTestDatabase")
     this.getTestDatabaseInfo(configService)
+    if (this.cleanupRequired)
+      throw new Error("Test database cleanup must succeed before setup")
     if (this.setupPromise) return this.setupPromise
     if (this.testDataSource?.isInitialized) return
     if (this.owned || this.sources.size || this.admins.size)
@@ -293,9 +302,17 @@ export class SharedDatabaseModule {
         this.owned = { name }
         this.owned.oid = await this.databaseOid(admin, name)
       })
-      const source = new DataSource(this.connectionOptions())
+      const options = this.connectionOptions()
+      // TypeORM initialize can replace a schema error with its automatic destroy error.
+      const source = new DataSource({
+        ...options,
+        synchronize: false,
+        migrationsRun: false,
+      })
       this.sources.add(source)
       await source.initialize()
+      if (this.testOptions!.migrationsRun) await source.runMigrations()
+      if (options.synchronize) await source.synchronize()
       this.testDataSource = source
     } catch (error) {
       const errors = [error]
@@ -395,7 +412,11 @@ export class SharedDatabaseModule {
   }
 
   static getTestDataSource(): DataSource {
-    if (!this.testDataSource?.isInitialized || this.busy === "close") {
+    if (
+      !this.testDataSource?.isInitialized ||
+      this.cleanupRequired ||
+      this.busy === "close"
+    ) {
       throw new Error(
         "SharedDatabaseModule not initialized. Call setupTestDatabase first.",
       )
@@ -428,6 +449,7 @@ export class SharedDatabaseModule {
   }
 
   private static async cleanup(): Promise<void> {
+    this.cleanupRequired = true
     const errors: unknown[] = []
     for (const sources of [this.sources, this.admins]) {
       for (const source of sources) {
@@ -454,6 +476,7 @@ export class SharedDatabaseModule {
     }
     throwErrors(errors, "Test database cleanup failed")
     this.testDataSource = undefined
+    this.cleanupRequired = false
   }
 
   private static createProductionConfiguration(

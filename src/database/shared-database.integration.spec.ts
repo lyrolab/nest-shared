@@ -1,6 +1,7 @@
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { Test, TestingModule } from "@nestjs/testing"
 import { DataSource } from "typeorm"
+import { randomUUID } from "node:crypto"
 import { spawn, ChildProcess } from "node:child_process"
 import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path"
@@ -9,10 +10,12 @@ import {
   SharedDatabaseModule as Database,
   TestDatabaseInfo,
 } from "./index"
+import { FailingSchema1700000000001 } from "./fixtures/failing.migration"
 import { Person, Tag, Note, Entry } from "./fixtures/records.entity"
 
 const environment = new ConfigService()
-const databaseUrl = environment.get<string>("DATABASE_URL")
+const suppliedUrl = environment.get<string>("DATABASE_URL")
+let databaseUrl = suppliedUrl
 const integration = databaseUrl ? describe : describe.skip
 function targetUrl(base: string, name: string) {
   const url = new URL(base)
@@ -23,6 +26,10 @@ const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
 
 integration("owned PostgreSQL public boundary", () => {
   let admin: DataSource
+  let serverAdmin: DataSource
+  const fixtureBase = `fixture_${randomUUID().replaceAll("-", "")}`
+  let fixtureCreated = false
+  const recordedDatabases = new Set<string>()
   let app: TestingModule | undefined
   let scratch: string
   const children = new Set<ChildProcess>()
@@ -37,25 +44,29 @@ integration("owned PostgreSQL public boundary", () => {
     )
       throw new Error("Integration requires an owned local PostgreSQL server")
     const scratchRoot =
-      environment.get<string>("PAPERCLIP_RUN_SCRATCH_DIR") ??
       environment.get<string>("RUNNER_TEMP") ??
       join(process.cwd(), ".cache/nest-shared-tests")
     await mkdir(scratchRoot, { recursive: true })
     scratch = await mkdtemp(join(scratchRoot, "database-"))
-    admin = await new DataSource({
+    serverAdmin = await new DataSource({
       type: "postgres",
       url: databaseUrl,
       database: decodeURIComponent(new URL(databaseUrl).pathname.slice(1)),
     }).initialize()
-    initialCatalog = await admin.query<{ datname: string }[]>(
+    initialCatalog = await serverAdmin.query<{ datname: string }[]>(
       "SELECT datname FROM pg_database ORDER BY datname",
     )
+    await serverAdmin.query(`CREATE DATABASE ${quote(fixtureBase)}`)
+    fixtureCreated = true
+    databaseUrl = targetUrl(suppliedUrl!, fixtureBase)
+    admin = await new DataSource({
+      type: "postgres",
+      url: databaseUrl,
+    }).initialize()
     await admin.query(
-      "CREATE TABLE IF NOT EXISTS public.base_sentinel (id integer PRIMARY KEY)",
+      "CREATE TABLE public.base_sentinel (id integer PRIMARY KEY)",
     )
-    await admin.query(
-      "INSERT INTO public.base_sentinel VALUES (1) ON CONFLICT DO NOTHING",
-    )
+    await admin.query("INSERT INTO public.base_sentinel VALUES (1)")
   })
 
   afterEach(async () => {
@@ -88,8 +99,14 @@ integration("owned PostgreSQL public boundary", () => {
       const catalog = await admin.query<{ datname: string }[]>(
         "SELECT datname FROM pg_database ORDER BY datname",
       )
-      expect(catalog).toEqual(initialCatalog)
-      evidence.push({ finalCatalog: catalog, baseSentinel: "preserved" })
+      for (const name of recordedDatabases) await absent(name)
+      evidence.push({
+        initialCatalog,
+        finalCatalog: catalog,
+        baseSentinel: "preserved",
+        fixtureBase,
+        recordedDatabases: [...recordedDatabases],
+      })
       await writeFile(
         join(scratch, "evidence.json"),
         JSON.stringify(evidence, null, 2),
@@ -97,6 +114,12 @@ integration("owned PostgreSQL public boundary", () => {
       console.log(`PostgreSQL evidence: ${join(scratch, "evidence.json")}`)
     } finally {
       if (admin?.isInitialized) await admin.destroy()
+      try {
+        if (fixtureCreated)
+          await serverAdmin.query(`DROP DATABASE ${quote(fixtureBase)}`)
+      } finally {
+        if (serverAdmin?.isInitialized) await serverAdmin.destroy()
+      }
     }
   })
 
@@ -113,6 +136,10 @@ integration("owned PostgreSQL public boundary", () => {
         Database.forTest(options),
       ],
     }).compile()
+    recordedDatabases.add(
+      Database.getTestDatabaseInfo(new ConfigService({ DATABASE_URL: url }))
+        .databaseName,
+    )
     return { factory: Database.getTestDataSource(), nest: app.get(DataSource) }
   }
 
@@ -133,7 +160,9 @@ integration("owned PostgreSQL public boundary", () => {
       migrationsTableName: "fixture_history",
       migrationsTransactionMode: "all",
     })
-    const info = Database.getTestDatabaseInfo()
+    const info = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
+    )
     for (const source of [factory, nest]) {
       expect(source.options.synchronize).toBe(false)
       expect(
@@ -207,12 +236,16 @@ integration("owned PostgreSQL public boundary", () => {
     })
     await nest.getRepository(Note).save({ text: "compatible" })
     expect(await factory.getRepository(Note).count()).toBe(1)
-    const info = Database.getTestDatabaseInfo()
+    const info = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
+    )
     await Database.closeTestConnection()
     expect(factory.isInitialized).toBe(false)
     expect(nest.isInitialized).toBe(false)
     await absent(info.databaseName)
-    await Database.setupTestDatabase()
+    await Database.setupTestDatabase(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
+    )
     expect(await Database.getTestDataSource().getRepository(Note).count()).toBe(
       0,
     )
@@ -220,7 +253,9 @@ integration("owned PostgreSQL public boundary", () => {
 
   it("preserves a collision and its sentinel on setup and close", async () => {
     Database.forTest({ entities: [Note] })
-    const info = Database.getTestDatabaseInfo()
+    const info = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
+    )
     await admin.query(`CREATE DATABASE ${quote(info.databaseName)}`)
     externalDatabases.add(info.databaseName)
     const other = await new DataSource({
@@ -230,9 +265,11 @@ integration("owned PostgreSQL public boundary", () => {
     try {
       await other.query("CREATE TABLE sentinel (id integer)")
       await other.query("INSERT INTO sentinel VALUES (7)")
-      await expect(Database.setupTestDatabase()).rejects.toThrow(
-        /already exists/,
-      )
+      await expect(
+        Database.setupTestDatabase(
+          new ConfigService({ DATABASE_URL: databaseUrl }),
+        ),
+      ).rejects.toThrow(/already exists/)
       await Database.clearTestDatabase()
       await Database.closeTestConnection()
       expect(
@@ -245,7 +282,9 @@ integration("owned PostgreSQL public boundary", () => {
 
   it("refuses ordinary DROP while an external connection is active and supports retry", async () => {
     const { factory, nest } = await compile({ entities: [Note] })
-    const info = Database.getTestDatabaseInfo()
+    const info = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
+    )
     const other = await new DataSource({
       type: "postgres",
       url: targetUrl(databaseUrl!, info.databaseName),
@@ -269,31 +308,114 @@ integration("owned PostgreSQL public boundary", () => {
     await absent(info.databaseName)
   }, 15000)
 
+  it("preserves a real migration error when factory cleanup also fails", async () => {
+    Database.forTest({
+      entities: [Note],
+      migrations: [FailingSchema1700000000001],
+      migrationsRun: true,
+    })
+    const config = new ConfigService({ DATABASE_URL: databaseUrl })
+    const info = Database.getTestDatabaseInfo(config)
+    recordedDatabases.add(info.databaseName)
+    const destroy = jest.spyOn(DataSource.prototype, "destroy")
+    const original = destroy.getMockImplementation()!
+    destroy.mockImplementation(function (this: DataSource) {
+      if (this.options.database === info.databaseName)
+        return Promise.reject(
+          new Error("intentional automatic destroy failure"),
+        )
+      return original.call(this)
+    })
+    try {
+      let failure: unknown
+      try {
+        await Database.setupTestDatabase(config)
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(AggregateError)
+      const messages = (failure as AggregateError).errors.map(String)
+      expect(messages.join("\n")).toMatch(/intentional migration failure/)
+      expect(messages.join("\n")).toMatch(
+        /intentional automatic destroy failure/,
+      )
+      await expect(Database.setupTestDatabase(config)).rejects.toThrow(
+        "cleanup must succeed",
+      )
+      expect(() => Database.forTest({ entities: [Note] })).toThrow(
+        "cleanup must succeed",
+      )
+      evidence.push({
+        mode: "migration-and-destroy-failure",
+        ...info,
+        errors: messages,
+      })
+    } finally {
+      destroy.mockRestore()
+    }
+    await Database.closeTestConnection()
+    await absent(info.databaseName)
+  })
+
+  it("blocks setup and Nest creation after failed factory teardown until cleanup succeeds", async () => {
+    const { factory } = await compile({ entities: [Note] })
+    const config = new ConfigService({ DATABASE_URL: databaseUrl })
+    const info = Database.getTestDatabaseInfo(config)
+    const destroy = jest
+      .spyOn(factory, "destroy")
+      .mockRejectedValue(new Error("intentional retained factory"))
+    try {
+      await expect(Database.closeTestConnection()).rejects.toThrow(
+        "intentional retained factory",
+      )
+      expect(factory.isInitialized).toBe(true)
+      await expect(Database.setupTestDatabase(config)).rejects.toThrow(
+        "cleanup must succeed",
+      )
+      expect(() => Database.forTest({ entities: [Note] })).toThrow(
+        "cleanup must succeed",
+      )
+      expect(() => Database.getTestDataSource()).toThrow("not initialized")
+      evidence.push({
+        mode: "failed-teardown-blocks-setup",
+        ...info,
+        setupRejected: true,
+        factoryRetained: factory.isInitialized,
+      })
+    } finally {
+      destroy.mockRestore()
+    }
+    await Database.closeTestConnection()
+    await absent(info.databaseName)
+    await Database.setupTestDatabase(config)
+    expect(Database.getTestDataSource()).not.toBe(factory)
+  })
+
   it("rejects replaced ownership and preserves the replacement sentinel", async () => {
     await verifyChild(await childRun("replacement"), 1)
   }, 120000)
 
-  it.each(['雪" space%'.repeat(4), "a".repeat(63)])(
-    "connects to safely quoted UTF-8 bases %p",
-    async (base) => {
-      const url = new URL(databaseUrl!)
-      url.pathname = `/${encodeURIComponent(base)}`
-      await admin.query(`CREATE DATABASE ${quote(base)}`)
-      externalDatabases.add(base)
-      const { factory, nest } = await compile(
-        { entities: [Note] },
-        url.toString(),
-      )
-      const info = Database.getTestDatabaseInfo(
-        new ConfigService({ DATABASE_URL: url.toString() }),
-      )
-      expect(Buffer.byteLength(info.databaseName)).toBeLessThanOrEqual(63)
-      await factory.getRepository(Note).save({ text: "quoted" })
-      expect(await nest.getRepository(Note).count()).toBe(1)
-      await Database.closeTestConnection()
-      await absent(info.databaseName)
-    },
-  )
+  it.each([
+    `雪" space%_${randomUUID()}`,
+    `a${randomUUID().replaceAll("-", "")} ${"a".repeat(29)}`,
+  ])("connects to safely quoted UTF-8 bases %p", async (base) => {
+    const url = new URL(databaseUrl!)
+    url.pathname = `/${encodeURIComponent(base)}`
+    await admin.query(`CREATE DATABASE ${quote(base)}`)
+    externalDatabases.add(base)
+    const { factory, nest } = await compile(
+      { entities: [Note] },
+      url.toString(),
+    )
+    const info = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: url.toString() }),
+    )
+    expect(Buffer.byteLength(info.databaseName)).toBeLessThanOrEqual(63)
+    await factory.getRepository(Note).save({ text: "quoted" })
+    expect(await nest.getRepository(Note).count()).toBe(1)
+    await Database.closeTestConnection()
+    await absent(info.databaseName)
+  })
 
   async function waitForFile(
     path: string,
@@ -346,7 +468,7 @@ integration("owned PostgreSQL public boundary", () => {
     ]
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: { ...process.env, DATABASE_URL: databaseUrl },
       stdio: ["ignore", "pipe", "pipe"],
     })
     children.add(child)
@@ -420,6 +542,7 @@ integration("owned PostgreSQL public boundary", () => {
         }
         await admin.query(`DROP DATABASE ${quote(identity.databaseName)}`)
       }
+      recordedDatabases.add(identity.databaseName)
       await absent(identity.databaseName)
       identities.push(identity)
     }

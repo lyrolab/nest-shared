@@ -21,7 +21,7 @@ npm install @lyrolab/nest-shared
 | [Cache](./src/cache/README.md)                   | `@lyrolab/nest-shared/cache`          | Redis-backed caching (preferred over raw Redis)                  | `SharedCacheModule`                                                                           |       ✅        |
 | [CASL](./src/casl/README.md)                     | `@lyrolab/nest-shared/casl`           | nest-casl subject hooks and permission test helper               | `BaseHook`, `getAbilityFactory()`                                                             |       ❌        |
 | [Config](./src/config/README.md)                 | `@lyrolab/nest-shared/config`         | Fail-fast environment validation with class-validator            | `validateEnv()`, `registerConfig()`                                                           |       ❌        |
-| [Database](./src/database/README.md)             | `@lyrolab/nest-shared/database`       | TypeORM + PostgreSQL with TestContainers and TypeORM CLI source  | `SharedDatabaseModule`, `TypeOrmExceptionFilter`, `createCliDataSource()`                     |       ✅        |
+| [Database](./src/database/README.md)             | `@lyrolab/nest-shared/database`       | TypeORM + PostgreSQL with isolated test databases and CLI source | `SharedDatabaseModule`, `TypeOrmExceptionFilter`, `createCliDataSource()`                     |       ✅        |
 | [ESLint](./src/eslint/README.md)                 | `@lyrolab/nest-shared/eslint`         | Shared ESLint config with custom architecture rules              | `nestArchitecturePlugin`                                                                      |       ❌        |
 | [Health](./src/health/README.md)                 | `@lyrolab/nest-shared/health`         | Health check endpoint via Terminus                               | `SharedHealthModule`                                                                          |       ❌        |
 | [Keycloak Admin](./src/keycloak-admin/README.md) | `@lyrolab/nest-shared/keycloak-admin` | Client-credentials Keycloak admin client for user operations     | `KeycloakAdminModule`, `KeycloakAdminService`                                                 |       ✅        |
@@ -126,7 +126,7 @@ export class MyService {
 | `OTEL_ENABLED`       |    ❌    | Observability             | `false` disables telemetry            |
 | `OTEL_EXPORTER_URL`  |    ❌    | Observability             | OTLP/gRPC collector endpoint          |
 | `APP_STAGE`          |    ❌    | Observability             | Deployment environment name           |
-| `NODE_ENV`           |    ❌    | All                       | Set to `test` for TestContainers mode |
+| `NODE_ENV`           |    ❌    | All                       | Application environment               |
 
 ## Development
 
@@ -136,7 +136,7 @@ export class MyService {
 # Clone and install
 git clone https://github.com/lyrolab/nest-shared.git
 cd nest-shared
-npm install
+npm ci
 
 # Build
 npm run build
@@ -148,6 +148,8 @@ npm run test:cov   # With coverage
 # Watch mode
 npm run dev
 ```
+
+Database acceptance tests need PostgreSQL. Follow the [local verification recipe](./src/database/README.md#library-verification) to start and stop your own server and run the complete suite. Without DATABASE_URL, Jest reports the database integration suite as skipped.
 
 ### Adding a New Module
 

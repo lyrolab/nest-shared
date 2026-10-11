@@ -168,6 +168,8 @@ describe("test database public API", () => {
   })
 
   function mockBoundary() {
+    jest.spyOn(DataSource.prototype, "synchronize").mockResolvedValue()
+    jest.spyOn(DataSource.prototype, "runMigrations").mockResolvedValue([])
     const sources: DataSource[] = []
     const initialize = jest
       .spyOn(DataSource.prototype, "initialize")
@@ -365,6 +367,13 @@ describe("test database public API", () => {
       "factory destroy failed",
     )
     expect(factory.isInitialized).toBe(true)
+    await expect(Database.setupTestDatabase(config())).rejects.toThrow(
+      "cleanup must succeed",
+    )
+    expect(() => Database.forTest({ entities: [] })).toThrow(
+      "cleanup must succeed",
+    )
+    expect(() => Database.getTestDataSource()).toThrow("not initialized")
     expect(
       query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
     ).toBe(false)
