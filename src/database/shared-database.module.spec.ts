@@ -274,16 +274,15 @@ describe("test database public API", () => {
         columns: { id: { type: Number, primary: true } },
       }),
     ]
-    const metadataSource = new DataSource({
-      type: "postgres",
-      entities: selection,
-    })
     class MetadataSource extends DataSource {
       async build(): Promise<void> {
         await this.buildMetadatas()
       }
     }
-    const built = new MetadataSource(metadataSource.options)
+    const built = new MetadataSource({
+      type: "postgres",
+      entities: selection,
+    })
     await built.build()
     Object.defineProperty(source, "entityMetadatas", {
       value: built.entityMetadatas,
