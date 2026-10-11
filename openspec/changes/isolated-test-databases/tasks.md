@@ -1,8 +1,8 @@
 ## 1. Invocation and public options
 
-- [ ] 1.1 Export the invocation creator, token/info types, initializer, info accessor, and ForTestOptions from the database barrel. Add unit coverage through those exports for repeated initialization, worker precedence (including empty values), PID/entropy, and conflicting identity/configuration.
-- [ ] 1.2 Implement the bounded UTF-8 name, structured identity digest, URL encoding, and identifier quoting. Verify long bases, shared prefixes, Unicode, quotes, empty/NUL rejection, and the 63-byte bound through public info/setup calls.
-- [ ] 1.3 Resolve DATABASE_URL through ConfigService and freeze one context configuration; guard repeated registration and concurrent setup. Verify standalone and Nest inputs agree and configuration drift fails before selecting another target.
+- [x] 1.1 Export the invocation creator, token/info types, initializer, info accessor, and ForTestOptions from the database barrel. Add unit coverage through those exports for repeated initialization, worker precedence (including empty values), PID/entropy, and conflicting identity/configuration.
+- [x] 1.2 Implement the bounded UTF-8 name, structured identity digest, URL encoding, and identifier quoting. Verify long bases, shared prefixes, Unicode, quotes, empty/NUL rejection, and the 63-byte bound through public info/setup calls.
+- [x] 1.3 Resolve DATABASE_URL through ConfigService and freeze one context configuration; guard repeated registration and concurrent setup. Verify standalone and Nest inputs agree and configuration drift fails before selecting another target.
 
 ## 2. Owned setup and schema
 
