@@ -1,5 +1,7 @@
 # Implementation verification
 
+Current rework inputs and acceptance results are in [rework-verification.md](./rework-verification.md). The results below apply to the earlier input commit only.
+
 Tested code: `dc6e8984631e054ab0afa07306b7bac5253dd98c` on [PR #11](https://github.com/lyrolab/nest-shared/pull/11). Later task/evidence/packaging edits do not change runtime or test inputs. Runtime, fixture, dependency, or Jest configuration changes invalidate the affected evidence.
 
 ## Commands and results
