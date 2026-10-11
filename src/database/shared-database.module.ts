@@ -154,7 +154,12 @@ export class SharedDatabaseModule {
         )
       return this.configuration.info
     }
-    const url = new URL(baseUrl)
+    let url: URL
+    try {
+      url = new URL(baseUrl)
+    } catch {
+      throw new Error("Invalid test DATABASE_URL")
+    }
     const baseName = decodeURIComponent(url.pathname.slice(1))
     quoteIdentifier(baseName)
     const identity = this.identity!

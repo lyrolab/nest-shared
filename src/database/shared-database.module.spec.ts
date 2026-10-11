@@ -123,6 +123,14 @@ describe("test database public API", () => {
     expect(names[0]).toBe(names[1])
   })
 
+  it("does not expose connection credentials in invalid URL diagnostics", () => {
+    expect(() =>
+      Database.getTestDatabaseInfo(
+        new ConfigService({ DATABASE_URL: "postgres://private:secret@[" }),
+      ),
+    ).toThrow("Invalid test DATABASE_URL")
+  })
+
   it("hashes the full base even when readable prefixes match", async () => {
     const token = createTestDatabaseInvocation()
     Database.initializeTestInvocation(token)

@@ -38,7 +38,8 @@ integration("owned PostgreSQL public boundary", () => {
       throw new Error("Integration requires an owned local PostgreSQL server")
     const scratchRoot =
       environment.get<string>("PAPERCLIP_RUN_SCRATCH_DIR") ??
-      join(process.cwd(), "node_modules/.cache/nest-shared-tests")
+      environment.get<string>("RUNNER_TEMP") ??
+      join(process.cwd(), ".cache/nest-shared-tests")
     await mkdir(scratchRoot, { recursive: true })
     scratch = await mkdtemp(join(scratchRoot, "database-"))
     admin = await new DataSource({
