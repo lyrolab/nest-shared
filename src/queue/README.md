@@ -34,6 +34,22 @@ export class MyJobProcessor implements JobProcessorInterface {
 }
 ```
 
+`process` also receives the worker's lock token, which BullMQ requires to move the active job, e.g. to postpone it without consuming an attempt:
+
+```typescript
+import { DelayedError, Job } from "bullmq"
+
+async process(job: Job, token?: string) {
+  if (await this.quota.isExhausted()) {
+    await job.moveToDelayed(this.quota.resetsAt().getTime(), token)
+    throw new DelayedError()
+  }
+  // ...
+}
+```
+
+A thrown `DelayedError` is rethrown to BullMQ without being logged as a failure.
+
 3. Enqueue jobs — no queue argument, routing is resolved from the processor's registration:
 
 ```typescript

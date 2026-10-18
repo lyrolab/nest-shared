@@ -1,5 +1,5 @@
 import { DiscoveryService } from "@nestjs/core"
-import { Job, Queue, Telemetry } from "bullmq"
+import { DelayedError, Job, Queue, Telemetry } from "bullmq"
 import { JobProcessorMetadata } from "../decorators/queue.decorator"
 import { QueueModuleOptions } from "../interfaces/queue-options.interface"
 import { JobProcessorInterface } from "../models/job-processor-interface"
@@ -156,6 +156,28 @@ describe("createQueueProcessor", () => {
 
       await expect(processor.process(makeJob())).rejects.toBe(error)
       expect(console.error).toHaveBeenCalledWith(error)
+    })
+
+    it("rethrows a DelayedError without logging it", async () => {
+      const error = new DelayedError()
+      const { processor } = createProcessor({
+        jobProcessor: { process: jest.fn().mockRejectedValue(error) },
+      })
+
+      await expect(processor.process(makeJob())).rejects.toBe(error)
+      expect(console.error).not.toHaveBeenCalled()
+    })
+
+    it("forwards the job lock token to the handler", async () => {
+      const jobProcessor: JobProcessorInterface = {
+        process: jest.fn().mockResolvedValue(undefined),
+      }
+      const { processor } = createProcessor({ jobProcessor })
+      const job = makeJob()
+
+      await processor.process(job, "lock-token")
+
+      expect(jobProcessor.process).toHaveBeenCalledWith(job, "lock-token")
     })
 
     it("resolves without throwing when the handler succeeds", async () => {
