@@ -424,5 +424,74 @@ describe("JwtStrategy", () => {
       expect(rolesOf(fromA)).toEqual(["user", "admin", "editor"])
       expect(rolesOf(fromB)).toEqual([])
     })
+
+    it("exposes realm roles, every client's roles and groups even when roles are untrusted", async () => {
+      const strategy = new JwtStrategy({
+        resolveIssuer: (iss) =>
+          iss === ISS_A ? { jwksUri: jwksA.jwksUri } : null,
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, {
+          ...realmAndClientRoles,
+          groups: ["/staff", "support"],
+        }),
+      )
+      expect(outcome).toMatchObject({
+        result: "success",
+        user: {
+          roles: [],
+          realmRoles: ["user", "admin"],
+          clientRoles: {
+            boardbot: ["editor", "user"],
+            "other-client": ["superuser"],
+          },
+          groups: ["/staff", "support"],
+        },
+      })
+    })
+
+    it("drops malformed role and group claims from the structured fields", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+      })
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, {
+          realm_access: { roles: "admin" },
+          resource_access: {
+            boardbot: { roles: [42, "editor"] },
+            broken: null,
+          },
+          groups: "staff",
+        }),
+      )
+      expect(outcome).toMatchObject({
+        result: "success",
+        user: {
+          realmRoles: [],
+          clientRoles: { boardbot: ["editor"], broken: [] },
+          groups: [],
+        },
+      })
+    })
+
+    it("keeps a __proto__ client as plain data", async () => {
+      const strategy = new JwtStrategy({
+        jwksUri: jwksA.jwksUri,
+        issuer: ISS_A,
+      })
+      const token = sign(idpA, ISS_A, {
+        resource_access: JSON.parse('{"__proto__": {"roles": ["admin"]}}'),
+      })
+      const outcome = await authenticate(strategy, token)
+      if (outcome.result !== "success") throw new Error(outcome.result)
+      const { clientRoles } = outcome.user as {
+        clientRoles: Record<string, string[]>
+      }
+      expect(Object.getPrototypeOf(clientRoles)).toBe(Object.prototype)
+      expect(Object.hasOwn(clientRoles, "__proto__")).toBe(true)
+    })
   })
 })

@@ -10,6 +10,10 @@ export interface ProvisioningIdentity {
   email?: string
   name?: string
   roles: string[]
+  /** See `AuthUser.realmRoles`: verified but not trusted by the library. */
+  realmRoles: string[]
+  clientRoles: Record<string, string[]>
+  groups: string[]
 }
 
 /**

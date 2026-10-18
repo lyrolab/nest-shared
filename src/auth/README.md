@@ -190,6 +190,19 @@ In dynamic mode, roles are read only from issuers whose `resolveIssuer` result s
 authenticates with `roles: []`, so a tenant-controlled IdP cannot mint application
 roles.
 
+`AuthUser` also carries the verified claims in structured form, for apps that map
+tenant roles to their own permissions (for example "staff = holders of realm role
+`x`"):
+
+| Field         | Source claim                                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `realmRoles`  | `realm_access.roles`                                                                                                        |
+| `clientRoles` | `resource_access[*].roles`, keyed by client id                                                                              |
+| `groups`      | `groups` (Keycloak group membership mapper, off by default; emits full paths such as `/staff` when "Full group path" is on) |
+
+They are filled for every issuer, regardless of `trustRoles`, and never feed
+`@Roles()`. Reading them is a trust decision the app makes per issuer.
+
 ### 8. Provision Local Users
 
 `createUserProvisioningGuard()` builds a guard that maps the verified caller to the
@@ -238,6 +251,10 @@ export class AuthModule {}
 - Nest runs global guards in registration order; register the provisioning guard
   **after** `JwtAuthGuard`, since it trusts `request.user`.
 - Requests without `request.user` (public routes) pass through unprovisioned.
+- `ProvisioningIdentity` carries `realmRoles`, `clientRoles` and `groups` from
+  `AuthUser`, so the provisioner can derive app-level membership from them on each
+  login. With `cacheTtlMs`, a changed claim takes effect once the cached entry
+  expires.
 - A caller without a verified issuer or subject, or a provisioner returning
   `null`/`undefined`, is rejected with 401. Exceptions thrown by the provisioner
   propagate, so it can refuse a user (e.g. an issuer no tenant owns).

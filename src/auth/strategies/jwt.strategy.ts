@@ -71,6 +71,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       name: payload.preferred_username,
       issuer: payload.iss,
       roles: roleSource ? extractRoles(payload, roleSource.clientId) : [],
+      realmRoles: stringList(payload.realm_access?.roles),
+      clientRoles: extractClientRoles(payload),
+      groups: stringList(payload.groups),
     }
   }
 
@@ -146,19 +149,37 @@ interface RoleSource {
 }
 
 function extractRoles(payload: JwtPayload, clientId?: string): string[] {
-  const realmRoles = payload.realm_access?.roles
   const clientAccess =
     clientId &&
     payload.resource_access &&
     Object.hasOwn(payload.resource_access, clientId)
       ? payload.resource_access[clientId]
       : undefined
-  const clientRoles = clientAccess?.roles
-  const roles = [
-    ...(Array.isArray(realmRoles) ? realmRoles : []),
-    ...(Array.isArray(clientRoles) ? clientRoles : []),
-  ].filter((role): role is string => typeof role === "string")
-  return [...new Set(roles)]
+  return [
+    ...new Set([
+      ...stringList(payload.realm_access?.roles),
+      ...stringList(clientAccess?.roles),
+    ]),
+  ]
+}
+
+// Object.fromEntries defines own properties, so a client named "__proto__"
+// cannot reach the prototype.
+function extractClientRoles(payload: JwtPayload): Record<string, string[]> {
+  const access: unknown = payload.resource_access
+  if (typeof access !== "object" || access === null) return {}
+  return Object.fromEntries(
+    Object.entries(access).map(([clientId, entry]) => [
+      clientId,
+      stringList((entry as { roles?: unknown } | null)?.roles),
+    ]),
+  )
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : []
 }
 
 function audienceMatches(
