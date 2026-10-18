@@ -97,6 +97,9 @@ describe("createUserProvisioningGuard", () => {
       email: "u@example.com",
       name: "u",
       roles: ["user"],
+      realmRoles: [],
+      clientRoles: {},
+      groups: [],
     })
     expect(request.dbUser).toEqual({
       id: "local-1",
@@ -117,6 +120,28 @@ describe("createUserProvisioningGuard", () => {
 
     expect(fromA.dbUser).not.toEqual(fromB.dbUser)
     expect(fromAAgain.dbUser).toEqual(fromA.dbUser)
+  })
+
+  it("passes the structured role and group claims through", async () => {
+    const { guard, provisioner } = await buildGuard()
+    const request: TestRequest = {
+      user: {
+        ...userFrom(ISS_A),
+        realmRoles: ["staff"],
+        clientRoles: { portal: ["moderator"] },
+        groups: ["/support"],
+      },
+    }
+
+    await guard.canActivate(contextFor(request))
+
+    expect(provisioner.provision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        realmRoles: ["staff"],
+        clientRoles: { portal: ["moderator"] },
+        groups: ["/support"],
+      }),
+    )
   })
 
   it("writes to a custom request property", async () => {

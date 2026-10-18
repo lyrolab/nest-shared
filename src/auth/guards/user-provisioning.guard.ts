@@ -103,5 +103,8 @@ function toIdentity(user: AuthUser): ProvisioningIdentity {
     email: user.email,
     name: user.name,
     roles: user.roles ?? [],
+    realmRoles: user.realmRoles ?? [],
+    clientRoles: user.clientRoles ?? {},
+    groups: user.groups ?? [],
   }
 }
