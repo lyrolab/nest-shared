@@ -1,6 +1,6 @@
 import { WorkerHost } from "@nestjs/bullmq"
 import { OnModuleInit } from "@nestjs/common"
-import { Job, Queue } from "bullmq"
+import { DelayedError, Job, Queue } from "bullmq"
 import { JobRegistryService } from "../services/job-registry.service"
 
 export abstract class BaseQueueProcessor
@@ -20,7 +20,7 @@ export abstract class BaseQueueProcessor
     await this.syncSchedulers()
   }
 
-  async process(job: Job) {
+  async process(job: Job, token?: string) {
     const registration = this.registry.getJob(job.name)
     if (!registration?.instance || registration.queue !== this.queueName) return
 
@@ -28,9 +28,9 @@ export abstract class BaseQueueProcessor
     if (!shouldProcess) return
 
     try {
-      await registration.instance.process(job)
+      await registration.instance.process(job, token)
     } catch (error) {
-      console.error(error)
+      if (!(error instanceof DelayedError)) console.error(error)
       // Rethrow so BullMQ marks the job failed and honors attempts/backoff.
       throw error
     }
