@@ -1,6 +1,6 @@
 # Nest Shared — `@lyrolab/nest-shared`
 
-A collection of shared NestJS modules published to npm as `@lyrolab/nest-shared`. Provides reusable infrastructure components (AI, Auth, Bootstrap, Bull/Queue, Cache, Database, ESLint, Health, Redis) used across LyroLab projects.
+A collection of shared NestJS modules published to npm as `@lyrolab/nest-shared`. Provides reusable infrastructure components (AI, Auth, Bootstrap, Bull/Queue, Cache, Database, ESLint, Health, Rate Limit, Redis) used across LyroLab projects.
 
 ## Repository Structure
 
@@ -16,6 +16,7 @@ nest-shared/
 │   ├── eslint/       # Shared ESLint config + custom rules
 │   ├── health/       # Health check endpoint (Terminus)
 │   ├── queue/        # Job processing with decorators
+│   ├── rate-limit/   # Redis-backed route rate limiting
 │   └── redis/        # Low-level Redis config
 ├── package.json      # Exports map — each module has its own entry
 ├── eslint.config.mjs # Root ESLint config

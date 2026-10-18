@@ -82,6 +82,11 @@
       "types": "./dist/observability/index.d.ts",
       "import": "./dist/observability/index.js",
       "require": "./dist/observability/index.js"
+    },
+    "./rate-limit": {
+      "types": "./dist/rate-limit/index.d.ts",
+      "import": "./dist/rate-limit/index.js",
+      "require": "./dist/rate-limit/index.js"
     }
   },
   "scripts": {
@@ -97,6 +102,7 @@
     "release": "semantic-release"
   },
   "dependencies": {
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^3.2.0",
     "passport": "^0.7.0",
@@ -113,6 +119,7 @@
     "@nestjs/swagger": "^11.0.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
+    "@nestjs/throttler": "^6.0.0",
     "@nestjs/typeorm": "^11.0.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@opentelemetry/api": "^1.9.0",
@@ -136,6 +143,9 @@
       "optional": true
     },
     "@nestjs/testing": {
+      "optional": true
+    },
+    "@nestjs/throttler": {
       "optional": true
     },
     "@openrouter/ai-sdk-provider": {
@@ -185,6 +195,7 @@
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@nestjs/throttler": "^6.7.1",
     "@nestjs/typeorm": "^11.0.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@opentelemetry/api": "^1.9.1",
