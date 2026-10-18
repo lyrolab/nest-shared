@@ -27,6 +27,7 @@ npm install @lyrolab/nest-shared
 | [Keycloak Admin](./src/keycloak-admin/README.md) | `@lyrolab/nest-shared/keycloak-admin` | Client-credentials Keycloak admin client for user operations     | `KeycloakAdminModule`, `KeycloakAdminService`                                                 |       ✅        |
 | [Observability](./src/observability/README.md)   | `@lyrolab/nest-shared/observability`  | OpenTelemetry traces, metrics and logs over OTLP                 | `startTelemetry()`                                                                            |       ✅        |
 | [Queue](./src/queue/README.md)                   | `@lyrolab/nest-shared/queue`          | Job processing with decorator-based processors and named queues  | `SharedQueueModule`, `QueueService`, `@JobProcessor()`                                        |       ✅        |
+| [Rate Limit](./src/rate-limit/README.md)         | `@lyrolab/nest-shared/rate-limit`     | Redis-backed route rate limiting on `@nestjs/throttler`          | `SharedRateLimitModule`, `@RateLimit()`, `RedisThrottlerStorage`                              |       ✅        |
 | [Redis](./src/redis/README.md)                   | `@lyrolab/nest-shared/redis`          | Low-level Redis configuration                                    | `SharedRedisModule`, `RedisConfig`                                                            |       ✅        |
 
 ## Quick Start

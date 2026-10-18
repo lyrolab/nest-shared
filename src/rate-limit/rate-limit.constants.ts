@@ -1,0 +1,3 @@
+export const RATE_LIMIT_MODULE_OPTIONS = "RATE_LIMIT_MODULE_OPTIONS"
+export const RATE_LIMIT_STORAGE = "RATE_LIMIT_STORAGE"
+export const RATE_LIMIT_RULES_KEY = "rate-limit:rules"

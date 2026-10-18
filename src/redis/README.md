@@ -60,7 +60,7 @@ export class MyRedisService {
 ```typescript
 export class RedisConfig {
   constructor(
-    public readonly url: string,       // e.g., "redis://localhost:6379"
+    public readonly url: string, // e.g., "redis://localhost:6379"
     public readonly keyPrefix?: string, // e.g., "test_1"
   ) {}
 }
@@ -72,17 +72,17 @@ export class RedisConfig {
 
 Use `SharedRedisModule` when you need **lower-level Redis access** via `ioredis` directly (e.g., pub/sub, Redis streams, Lua scripts, or operations not supported by `cache-manager`).
 
-| Use Case | Recommended Module |
-|----------|-------------------|
-| Key-value caching with TTL | `SharedCacheModule` (inject `Cache`) |
+| Use Case                            | Recommended Module                           |
+| ----------------------------------- | -------------------------------------------- |
+| Key-value caching with TTL          | `SharedCacheModule` (inject `Cache`)         |
 | Redis pub/sub, streams, Lua scripts | `SharedRedisModule` (use `ioredis` directly) |
-| Custom Redis data structures | `SharedRedisModule` (use `ioredis` directly) |
+| Custom Redis data structures        | `SharedRedisModule` (use `ioredis` directly) |
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|:--------:|-------------|
-| `REDIS_URL` | ✅ | Redis connection string (e.g., `redis://localhost:6379`) |
+| Variable    | Required | Description                                              |
+| ----------- | :------: | -------------------------------------------------------- |
+| `REDIS_URL` |    ✅    | Redis connection string (e.g., `redis://localhost:6379`) |
 
 ## How Other Modules Use This
 
@@ -91,6 +91,7 @@ This module is a dependency for:
 - **`SharedCacheModule`** — uses `RedisConfig.url` to configure `@keyv/redis`
 - **`SharedBullModule`** — uses `RedisConfig.url` for BullMQ connection
 - **`SharedQueueModule`** — uses `RedisConfig.url` for job queue processing
+- **`SharedRateLimitModule`** — uses `RedisConfig` for rate limit counters
 
 ## Related Modules
 
