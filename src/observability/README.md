@@ -38,7 +38,7 @@ import { LangfuseSpanProcessor } from "@langfuse/otel"
 import { startTelemetry } from "@lyrolab/nest-shared/observability"
 
 export const telemetry = startTelemetry({
-  serviceName: "lyrochat",
+  serviceName: "my-api",
   extraSpanProcessors: [new LangfuseSpanProcessor()],
 })
 ```

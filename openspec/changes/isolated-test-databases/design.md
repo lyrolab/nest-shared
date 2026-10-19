@@ -2,7 +2,7 @@
 
 The database API has two connection owners: the static factory DataSource and the Nest TypeORM DataSource. `forTest` records entity classes and builds Nest options; setup creates the worker database and synchronizes the factory schema. `forRoot` and `createCliDataSource` are separate production contracts.
 
-The design uses the verified consumer contract on LYR-98, revision `9f7462a9-3127-4825-b587-5646c144d9cd`, and upstream commit `0a30b73f4385c1ab700eb8e98d60b7ce7793f0a7`. Chaster's environment/setup shows why identity must exist before application imports and why applications close before database release. No Chaster code is part of this change.
+The design uses the verified consumer contract and upstream commit `0a30b73f4385c1ab700eb8e98d60b7ce7793f0a7`. Consumer environment setup shows why identity must exist before application imports and why applications close before database release. No consumer code is part of this change.
 
 ## Goals / Non-Goals
 

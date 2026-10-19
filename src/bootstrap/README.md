@@ -40,8 +40,8 @@ configureApp(app, {
   // true (default) | false | document options + `path`
   swagger: {
     path: "api",
-    title: "BoardBot API",
-    description: "BoardBot API",
+    title: "My API",
+    description: "My API",
     bearerAuth: true,
   },
   // merged over { whitelist: true, forbidNonWhitelisted: true }
@@ -75,7 +75,7 @@ CORS_ORIGINS="https://app.example.com, https://admin.example.com"
 import { generateOpenApi } from "@lyrolab/nest-shared/bootstrap"
 import { AppModule } from "./app.module"
 
-generateOpenApi(AppModule, { title: "BoardBot API", bearerAuth: true })
+generateOpenApi(AppModule, { title: "My API", bearerAuth: true })
   .then(() => process.exit(0))
   .catch((error) => {
     console.error("Failed to generate OpenAPI specification", error)
