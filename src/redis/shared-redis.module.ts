@@ -11,7 +11,10 @@ export class SharedRedisModule {
         {
           provide: RedisConfig,
           useFactory: (configService: ConfigService) => {
-            return new RedisConfig(configService.get("REDIS_URL") as string)
+            return new RedisConfig(
+              configService.get("REDIS_URL") as string,
+              configService.get<string>("REDIS_KEY_PREFIX") || undefined,
+            )
           },
           inject: [ConfigService],
         },

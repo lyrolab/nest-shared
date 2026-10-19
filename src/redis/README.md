@@ -4,7 +4,7 @@ Low-level Redis configuration module. Provides the `RedisConfig` class with the 
 
 ## What Is This?
 
-A lightweight module that reads `REDIS_URL` from environment configuration and makes it available as an injectable `RedisConfig` instance. It supports production and test environments.
+A lightweight module that reads `REDIS_URL` and the optional `REDIS_KEY_PREFIX` from environment configuration and makes it available as an injectable `RedisConfig` instance. It supports production and test environments.
 
 ## How Do I Use It?
 
@@ -19,6 +19,8 @@ import { SharedRedisModule, RedisConfig } from "@lyrolab/nest-shared/redis"
 })
 export class AppModule {}
 ```
+
+Set `REDIS_KEY_PREFIX` to let several instances of an application share one Redis without seeing each other's keys, for example parallel development environments on one host. The cache, BullMQ and rate limit modules all apply it.
 
 ### Test Environment
 
@@ -80,9 +82,10 @@ Use `SharedRedisModule` when you need **lower-level Redis access** via `ioredis`
 
 ## Environment Variables
 
-| Variable    | Required | Description                                              |
-| ----------- | :------: | -------------------------------------------------------- |
-| `REDIS_URL` |    ✅    | Redis connection string (e.g., `redis://localhost:6379`) |
+| Variable           | Required | Description                                                                                                                           |
+| ------------------ | :------: | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL`        |    ✅    | Redis connection string (e.g., `redis://localhost:6379`)                                                                              |
+| `REDIS_KEY_PREFIX` |    ❌    | Key prefix for every module built on `RedisConfig` (cache namespace, BullMQ prefix, rate limit keys). Unset or empty means no prefix. |
 
 ## How Other Modules Use This
 

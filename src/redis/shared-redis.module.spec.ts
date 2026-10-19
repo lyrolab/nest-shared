@@ -1,3 +1,4 @@
+import { ConfigService } from "@nestjs/config"
 import { RedisConfig } from "./redis.config"
 import { SharedRedisModule } from "./shared-redis.module"
 
@@ -65,14 +66,52 @@ describe("SharedRedisModule", () => {
   })
 
   describe("forRoot", () => {
-    it("does not set a key prefix", () => {
+    it("is a global module", () => {
       const dynamicModule = SharedRedisModule.forRoot()
 
       expect(dynamicModule.module).toBe(SharedRedisModule)
       expect(dynamicModule.global).toBe(true)
     })
+
+    it("leaves the key prefix unset by default", () => {
+      const redisConfig = buildRootConfig({ REDIS_URL: "redis://host:6379" })
+
+      expect(redisConfig.url).toBe("redis://host:6379")
+      expect(redisConfig.keyPrefix).toBeUndefined()
+    })
+
+    it("reads the key prefix from REDIS_KEY_PREFIX", () => {
+      const redisConfig = buildRootConfig({
+        REDIS_URL: "redis://host:6379",
+        REDIS_KEY_PREFIX: "env_a",
+      })
+
+      expect(redisConfig.keyPrefix).toBe("env_a")
+    })
+
+    it("treats an empty REDIS_KEY_PREFIX as unset", () => {
+      const redisConfig = buildRootConfig({
+        REDIS_URL: "redis://host:6379",
+        REDIS_KEY_PREFIX: "",
+      })
+
+      expect(redisConfig.keyPrefix).toBeUndefined()
+    })
   })
 })
+
+function buildRootConfig(values: Record<string, string>): RedisConfig {
+  const provider = SharedRedisModule.forRoot().providers?.find(
+    (
+      p,
+    ): p is {
+      provide: typeof RedisConfig
+      useFactory: (configService: ConfigService) => RedisConfig
+    } => typeof p === "object" && p !== null && "useFactory" in p,
+  )
+  if (!provider) throw new Error("RedisConfig factory not found")
+  return provider.useFactory(new ConfigService(values))
+}
 
 function extractRedisConfig(providers: unknown[] | undefined): RedisConfig {
   const provider = providers?.find(
