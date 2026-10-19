@@ -17,7 +17,7 @@ Both Test workflow runs passed at the tested SHA: [pull request](https://github.
 
 ## Server and boundaries
 
-The local PostgreSQL 16 container `lyr104-applier-postgres` was created for LYR-104, labelled `paperclip.issue=LYR-104`, and exposed only at 127.0.0.1:32786. Container: `c9f4e0f63c5fac4087bbe8fae0a28f1461625c383554e197f56239be4fe16c89`. Image: `sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542`. No application PostgreSQL service was used.
+A dedicated local PostgreSQL 16 container was created for this change and exposed only at 127.0.0.1:32786. Container: `c9f4e0f63c5fac4087bbe8fae0a28f1461625c383554e197f56239be4fe16c89`. Image: `sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542`. No application PostgreSQL service was used.
 
 All 16 database scenarios passed. Real migrations loaded through TypeORM paths with synchronization disabled. Entity discovery retained class, EntitySchema, relation and junction metadata in both owners. Schema-qualified/quoted clearing left migration history and migration-only data intact. Long and Unicode/quoted base names connected correctly. Collisions and replacement sentinels were preserved. Ordinary DROP rejected an extra connection; retry succeeded after it closed.
 
@@ -48,6 +48,6 @@ The final catalog exactly matched the starting catalog: `nest_shared`, `postgres
 
 Production `forRoot` configuration/migrations and CLI lifecycle retain their contracts. The diff contains no auth/JWT/session or LLM prompt/token changes; their existing tests pass in the full suite. Sensitive surfaces are shared database ownership/lifecycle, the public test API, and migration-backed test schemas. Simplifier should preserve CREATE/OID ownership, connection tracking, cleanup error aggregation and lifecycle guards.
 
-The supported consumer initialization/migration/teardown recipe is in `src/database/README.md`. Consumer adoption and worker bootstrap remain separate. Reviewer archives the completed OpenSpec change on this branch where possible, merges under standing policy, leaves LYR-104 open, and hands it to Founding Engineer for actual semantic-release/npm verification. No version is predicted and no package is manually published.
+The supported consumer initialization/migration/teardown recipe is in `src/database/README.md`. Consumer adoption and worker bootstrap remain separate. Reviewer archives the completed OpenSpec change on this branch where possible, merges under standing policy, and hands release verification to Founding Engineer for actual semantic-release/npm verification. No version is predicted and no package is manually published.
 
-The workspace's initial local `npm pack` dry run included unrelated harness-mounted checkouts. [LYR-107](/LYR/issues/LYR-107) reports this to Founding Engineer. Clean-export package inspection passes; this environment issue does not block the feature.
+The workspace's initial local `npm pack` dry run included unrelated harness-mounted checkouts. A separate issue reports this to Founding Engineer. Clean-export package inspection passes; this environment issue does not block the feature.

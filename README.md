@@ -52,7 +52,7 @@ import { keycloakConfig } from "@lyrolab/nest-shared/auth"
     SharedAuthModule.forRoot(
       keycloakConfig(
         process.env.KEYCLOAK_URL ?? "http://localhost:8080",
-        process.env.KEYCLOAK_REALM ?? "lyrochat",
+        process.env.KEYCLOAK_REALM ?? "my-realm",
       ),
     ),
     SharedCacheModule.forRoot(),

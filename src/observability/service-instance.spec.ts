@@ -5,7 +5,7 @@ import {
 
 describe("resolveServiceInstanceId", () => {
   it.each([
-    ["lyrochat-backend-6d7c9b8f4f-x2k9p", "lyrochat-backend-6d7c9b8f4f-x2k9p"],
+    ["my-api-6d7c9b8f4f-x2k9p", "my-api-6d7c9b8f4f-x2k9p"],
     ["pod_01.example", "pod_01.example"],
     [undefined, UNKNOWN_SERVICE_INSTANCE_ID],
     ["", UNKNOWN_SERVICE_INSTANCE_ID],

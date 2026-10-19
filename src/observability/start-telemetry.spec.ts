@@ -84,14 +84,14 @@ describe("createTelemetrySdk", () => {
 
   it("describes the service, instance and stage in the resource", () => {
     const sdk = createTelemetrySdk(
-      { serviceName: "lyrochat" },
-      { APP_STAGE: "preprod", HOSTNAME: "lyrochat-backend-abc12" },
+      { serviceName: "my-api" },
+      { APP_STAGE: "preprod", HOSTNAME: "my-api-abc12" },
       inMemoryFactories(),
     )
 
     expect(internals(sdk)._resource.attributes).toMatchObject({
-      "service.name": "lyrochat",
-      "service.instance.id": "lyrochat-backend-abc12",
+      "service.name": "my-api",
+      "service.instance.id": "my-api-abc12",
       "deployment.environment.name": "preprod",
     })
   })

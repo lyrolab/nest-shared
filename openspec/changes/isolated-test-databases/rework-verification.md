@@ -38,6 +38,6 @@ Final server inspection contains only the supplied base, its pre-seeded fixed da
 
 ## Scope
 
-Sensitive surfaces: shared database ownership/lifecycle, public test API, and migration-backed schemas. Production forRoot/configuration/migrations and CLI implementation have no rework edits. Auth/JWT/session and LLM prompts/token files are untouched. Consumer adoption/bootstrap, Chaster, cancelled work, skills, and agent instructions remain outside this PR.
+Sensitive surfaces: shared database ownership/lifecycle, public test API, and migration-backed schemas. Production forRoot/configuration/migrations and CLI implementation have no rework edits. Auth/JWT/session and LLM prompts/token files are untouched. Consumer adoption/bootstrap, consumer applications, cancelled work, skills, and agent instructions remain outside this PR.
 
 This issue remains open through review and publication verification. Simplifier rechecks this rework, then Reviewer reviews before an autonomous merge. Founding Engineer verifies the actual semantic-release/npm version and downstream recipe; no manual publication or predicted version.

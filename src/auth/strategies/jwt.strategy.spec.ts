@@ -238,9 +238,7 @@ describe("JwtStrategy", () => {
     beforeAll(() => {
       const options: DynamicAuthOptions = {
         resolveIssuer: (iss) =>
-          iss === ISS_A
-            ? { jwksUri: jwksA.jwksUri, audience: "boardbot" }
-            : null,
+          iss === ISS_A ? { jwksUri: jwksA.jwksUri, audience: "myapp" } : null,
       }
       strategy = new JwtStrategy(options)
     })
@@ -248,7 +246,7 @@ describe("JwtStrategy", () => {
     it("accepts a token with the expected audience", async () => {
       const outcome = await authenticate(
         strategy,
-        sign(idpA, ISS_A, { aud: "boardbot" }),
+        sign(idpA, ISS_A, { aud: "myapp" }),
       )
       expect(outcome.result).toBe("success")
     })
@@ -311,7 +309,7 @@ describe("JwtStrategy", () => {
     const realmAndClientRoles = {
       realm_access: { roles: ["user", "admin"] },
       resource_access: {
-        boardbot: { roles: ["editor", "user"] },
+        myapp: { roles: ["editor", "user"] },
         "other-client": { roles: ["superuser"] },
       },
     }
@@ -325,7 +323,7 @@ describe("JwtStrategy", () => {
       const strategy = new JwtStrategy({
         jwksUri: jwksA.jwksUri,
         issuer: ISS_A,
-        clientId: "boardbot",
+        clientId: "myapp",
       })
       const outcome = await authenticate(
         strategy,
@@ -359,13 +357,13 @@ describe("JwtStrategy", () => {
       const strategy = new JwtStrategy({
         jwksUri: jwksA.jwksUri,
         issuer: ISS_A,
-        clientId: "boardbot",
+        clientId: "myapp",
       })
       const outcome = await authenticate(
         strategy,
         sign(idpA, ISS_A, {
           realm_access: { roles: "admin" },
-          resource_access: { boardbot: { roles: [42, "editor"] } },
+          resource_access: { myapp: { roles: [42, "editor"] } },
         }),
       )
       expect(rolesOf(outcome)).toEqual(["editor"])
@@ -386,9 +384,7 @@ describe("JwtStrategy", () => {
     it("ignores roles from a dynamic issuer that is not trusted for roles", async () => {
       const strategy = new JwtStrategy({
         resolveIssuer: (iss) =>
-          iss === ISS_A
-            ? { jwksUri: jwksA.jwksUri, clientId: "boardbot" }
-            : null,
+          iss === ISS_A ? { jwksUri: jwksA.jwksUri, clientId: "myapp" } : null,
       })
       const outcome = await authenticate(
         strategy,
@@ -404,7 +400,7 @@ describe("JwtStrategy", () => {
             return {
               jwksUri: jwksA.jwksUri,
               trustRoles: true,
-              clientId: "boardbot",
+              clientId: "myapp",
             }
           }
           if (iss === ISS_B) return { jwksUri: jwksB.jwksUri }
@@ -443,7 +439,7 @@ describe("JwtStrategy", () => {
           roles: [],
           realmRoles: ["user", "admin"],
           clientRoles: {
-            boardbot: ["editor", "user"],
+            myapp: ["editor", "user"],
             "other-client": ["superuser"],
           },
           groups: ["/staff", "support"],
@@ -461,7 +457,7 @@ describe("JwtStrategy", () => {
         sign(idpA, ISS_A, {
           realm_access: { roles: "admin" },
           resource_access: {
-            boardbot: { roles: [42, "editor"] },
+            myapp: { roles: [42, "editor"] },
             broken: null,
           },
           groups: "staff",
@@ -471,7 +467,7 @@ describe("JwtStrategy", () => {
         result: "success",
         user: {
           realmRoles: [],
-          clientRoles: { boardbot: ["editor"], broken: [] },
+          clientRoles: { myapp: ["editor"], broken: [] },
           groups: [],
         },
       })
