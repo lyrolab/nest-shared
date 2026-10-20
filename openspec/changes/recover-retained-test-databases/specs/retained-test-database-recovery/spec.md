@@ -90,7 +90,7 @@ Recovery SHALL bound all work with timeoutMs and mandatory close with closeTimeo
 
 #### Scenario: Cancellation before DROP
 
-- **WHEN** cancellation or deadline occurs before DROP dispatch, including during connect or inspection
+- **WHEN** cancellation or deadline occurs before DROP permission, including during startup, connect or inspection
 - **THEN** recovery closes within its cleanup budget, reports not-attempted, and cannot issue a late DROP
 
 #### Scenario: DROP response or verification is uncertain
@@ -120,19 +120,19 @@ The private administration helper SHALL create and retain its own Node socket an
 
 - **WHEN** abort/deadline interrupts connect, TLS negotiation, authentication or an active query
 - **THEN** dispatch stops synchronously and the owned transport is disposed without waiting for graceful shutdown
-- **AND** connect/query/end failures are observed, including the fixed local interruption error needed to settle unfinished connect
+- **AND** on natural session completion connect/query/end failures are observed, including the fixed local interruption error needed to settle unfinished connect
 - **AND** no late readiness or queued continuation can issue another query, and natural exit needs no parent fixture cleanup
 
 #### Scenario: Certificate validation fails
 
 - **WHEN** a peer presents an untrusted certificate or a trusted certificate for the wrong DNS name or IP
 - **THEN** pg rejects connection without disabling certificate verification or dispatching recovery work
-- **AND** cleanup settles within budget and the caller exits naturally, while valid trusted DNS/IP certificates remain usable
+- **AND** cleanup confirms child disposal within budget and the caller exits naturally, while valid trusted DNS/IP certificates remain usable
 
 #### Scenario: Disposal cannot be confirmed or remote lock remains
 
-- **WHEN** local closure or pending-operation settlement cannot be confirmed within the reserved close budget
-- **THEN** recovery retains CLOSE_FAILED with any primary failure and never reports success
+- **WHEN** natural local closure or pending-operation settlement cannot be confirmed within the reserved close budget
+- **THEN** recovery retains CLOSE_FAILED with any primary failure, disposes and joins its isolated child, and never reports success
 - **AND** a locally closed lease is unusable, but retry must still acquire the server lock and cannot assume immediate remote lock release
 
 ### Requirement: Native public-package proof and consumable release
@@ -177,6 +177,43 @@ Recovery SHALL accept the narrow TestDatabaseRecoveryTls PEM-string contract and
 #### Scenario: Internal authentication or resolution outlives socket close
 
 - **WHEN** deadline/cancellation occurs while real hostname lookup or pg SCRAM crypto is queued behind finite unrelated shared-pool work in a cold fresh recovery process
-- **THEN** recovery must settle every recovery-started operation within the original work/close allowance and cannot start more authentication or query work after return
+- **THEN** recovery SHALL contain that work in its owned child and confirm child termination plus channel closure within the original work/close allowance, with no recovery work after return
 - **AND** observed Client end/socket close alone cannot satisfy that requirement, unrelated fixture work is counted separately, and no abandoned promise or caller process exit substitutes for cleanup
-- **AND** a concrete public-interface mismatch returns to Founding Engineer before implementation continues
+- **AND** forced process disposal SHALL retain CLOSE_FAILED and never be described as fulfilled JavaScript work; a concrete unsupported disposal bound returns to Founding Engineer
+
+### Requirement: Owned recovery child and conservative destructive permission
+
+Recovery SHALL own one private packaged Node child, launched with process.execPath and no shell, inherited runtime flags, ambient PG/credential settings or descendants. The child SHALL own driver loading, DNS/TLS/authentication and the complete base-session/lease/DDL/verification lifecycle. Captured connection/PEM material SHALL travel only over bounded versioned owned IPC. The parent SHALL own the original work/close timeline and wait for observed process termination, closed IPC/stdio and all started send callbacks before returning. Ordinary callers SHALL exit naturally and existing normal lifecycle sessions SHALL retain their owner/configuration.
+
+#### Scenario: Startup or IPC cannot progress
+
+- **WHEN** startup/module loading, IPC backpressure, send failure, malformed/duplicate messages or child crash interrupts recovery
+- **THEN** the original work/close allowance applies without another startup allowance, permission stops and the owned child is joined
+- **AND** errors are fixed safe codes with no child diagnostics, secrets, target identity or connection material
+- **AND** inability to launch refuses without in-process fallback; pre-abort launches no child
+
+#### Scenario: Permission races with interruption or process death
+
+- **WHEN** the child holds the lease, validates the exact target and requests DROP permission
+- **THEN** the parent grants at most once while its deadline/signal permit, records unknown before send and the child rechecks stop/session/identity before SQL
+- **AND** no grant means not-attempted; possible grant followed by cancellation/send failure/crash/result loss remains unknown unless trustworthy subsequent verification establishes absence
+- **AND** no permit claims atomic SQL cancellation or atomic OID deletion
+
+#### Scenario: Cleanup needs forced process disposal
+
+- **WHEN** the owned child cannot finish naturally within the graceful half of the existing close budget
+- **THEN** the parent records CLOSE_FAILED, terminates only its still-owned child and confirms exit plus closed channels before return
+- **AND** forced disposal preserves any primary failure and uncertainty, never becomes success and is not described as natural child completion or fulfilled interrupted promises
+- **AND** kill return values, killed flags, timers and result messages cannot substitute for disposal confirmation
+
+#### Scenario: Parent channel disappears
+
+- **WHEN** the child observes parent disconnect
+- **THEN** it stops destructive work, disposes its owned session and uses its bounded owned-child self-termination fence if internal work cannot settle
+- **AND** no background recovery or descendant survives, and remote lock release or DROP absence is never inferred from local termination
+
+#### Scenario: Installed package and caller compatibility
+
+- **WHEN** ordinary fresh CommonJS/ESM Node/Jest/Vitest callers invoke the installed public database subpath
+- **THEN** the private compiled child entry is available independently of cwd/test loaders and every caller exits naturally after success or safe failure
+- **AND** optional-pg imports, explicit empty passwords, captured TLS material and normal forRoot/forTest/setup/reset TLS behavior retain their stated contracts
