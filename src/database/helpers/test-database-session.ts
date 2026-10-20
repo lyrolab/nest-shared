@@ -170,7 +170,10 @@ export class TestDatabaseSession {
     this.stopping = true
     let failed = false
     if (interrupted) this.socket.destroy(interruption())
-    const ending = this.observe(this.client.end())
+    const ending = this.observe(this.client.end()).catch(() => {
+      failed = true
+      this.socket.destroy(interruption())
+    })
     const confirm = async () => {
       await Promise.all([
         this.closed,
