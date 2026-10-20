@@ -34,6 +34,6 @@ Release verification belongs to Founding Engineer after review: verify actual re
 
 ## 6. Review fixes
 
-- [ ] 6.1 Contextually type the pg configuration and verify npm ci plus build with the actual locked pg types.
-- [ ] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
-- [ ] 6.3 Run the affected public API, transport and native checks, update the checkpoint with exact inputs and confirm passing CI on the final head before handoff.
+- [x] 6.1 Contextually type the pg configuration and verify npm ci plus build with the actual locked pg types.
+- [x] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
+- [x] 6.3 Run the affected public API, transport and native checks, update the checkpoint with exact inputs and confirm passing CI on the final head before handoff.

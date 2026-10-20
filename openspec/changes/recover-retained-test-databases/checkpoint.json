@@ -1,36 +1,42 @@
 {
   "stage": "apply",
-  "remaining": "Reviewer rework in progress. Both fixes and 10 configuration scenarios are implemented but unverified. Next: npm ci against locked dependencies (including @types/pg 8.23.1), build, public API/transport/database/CLI checks on owned PostgreSQL, lint and final CI. No new passing evidence claimed. Prior build/tests are invalidated by source and installed dependency changes. Keep same issue/branch/PR; return to Reviewer after verification per rework procedure.",
+  "remaining": "Apply rework complete: 20/20 tasks. Next owner: Simplifier after final-head CI succeeds, preserving this issue, branch and PR. Final-head CI is read again and recorded in the issue handoff. After reviewed merge, Reviewer returns the open issue to Founding Engineer for actual release verification; no released version or consumer readiness is claimed.",
   "verification": [
     {
-      "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand",
-      "result": "Pass: 398/398 tests, 34/34 suites, no skips; 372.563 seconds. Database coverage: 46 native public-boundary cases, 100 unit cases and 3 CLI cases. Distinct creator/recovery processes, restricted original acquisition records, terminated creators, exact removal/idempotence, refusal and sibling sentinels, quoted/UTF-8 identities, concurrency, five lifecycle barriers, lease loss and retry, native connected-target deadline/cancellation, natural exits and native postconditions under injected driver faults pass. The unit runner includes 13 implemented-helper plaintext/TLS transport cases, four late-continuation deadline phases, safe failure ordering, ambiguous catalog responses and public declaration smoke. Production/setup/reset/migration, auth, Keycloak, AI and other repository regressions pass. Native and injected transport evidence are distinct.",
-      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d; built public package from the same source. Node 24.13.0, pg 8.23.1, TypeScript 5.8.3, owned PostgreSQL 16. SHA-256 over sorted database files/manifests/compiler configurations/test workflow with filename/content NUL framing: 0b2537acf4ba6a1afcfd87f941a2ecac97cdc237efbb119f83b658f244dedf60. Subsequent edits are task/checkpoint metadata only.",
-      "invalidatedBy": "Production source, test/fixture data or cleanup, dependencies, runtime/server, compiler/Jest configuration or native prerequisites change."
+      "command": "npm ci --prefer-offline --no-audit; npm run build",
+      "result": "Pass: clean locked install of 1522 packages including @types/pg 8.23.1, prepare/build and separate whole build. Contextually typed configuration preserves the sslnegotiation literal union. Public declarations build; database fixtures are excluded from dist.",
+      "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
+      "invalidatedBy": "Production source, dependency manifest/lock/install graph, runtime or compiler/build configuration changes."
     },
     {
-      "command": "npm run build",
-      "result": "Pass: built public JS/declarations; database test fixtures excluded from dist.",
-      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d production source, manifests and compiler configuration; no production edit after build.",
-      "invalidatedBy": "Production source, dependencies or build/compiler configuration change."
+      "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand --json --outputFile=<run scratch>/rework-results.json",
+      "result": "Pass: 398/398 tests, 34/34 suites, no skips; 384.107 seconds. Includes 46 native public-package cases (295.305-second suite), 100 database unit cases and 3 CLI cases. Native creator/recovery processes, ownership/refusal/sibling sentinels, lifecycle barriers, concurrency, cancellation/deadlines, lease loss/retry and uncertainty regressions pass. Unit coverage includes 23 transport/configuration scenarios and public declaration smoke. Other production/auth/AI regressions pass. Owned PostgreSQL 16 container removed after success.",
+      "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
+      "invalidatedBy": "Source/tests/fixtures, dependencies, runtime/server, compiler/Jest configuration or native prerequisites change."
     },
     {
-      "command": "npm run lint; node_modules/.bin/eslint 'src/**/*.ts'",
-      "result": "Pass: full lint and final whole-source read-only ESLint. No suppressions or formatter changes required.",
-      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d source and current lint configuration.",
-      "invalidatedBy": "Source, lint configuration or lint dependency changes."
+      "command": "TMPDIR=<run scratch> node src/database/fixtures/transport-runner.cjs; node <run scratch>/review-bounded-tls-config.cjs",
+      "result": "Pass: 23/23 scenarios, each child exits naturally before parent fixture cleanup. Thirteen implemented-helper plaintext/TLS cases retain certificate validation and close-failure behavior. Ten public API configuration cases reject FIFOs on all certificate paths plus directories/devices, and interrupt injected delayed regular-file reads on deadline/cancellation. Every opened file closes and every started read settles; no subsequent TCP connection/query dispatch. Delayed-read deadline settles in 44 ms; cancellation in 28 ms. The original Reviewer FIFO probe reports settled=true with natural exit code 0 in both modes; its 300 ms report is not a settlement-time measurement. These are local/injected transport and file-I/O checks, separate from native PostgreSQL proof.",
+      "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
+      "invalidatedBy": "Helper/recovery API, transport runner/data, driver/types/runtime or filesystem interfaces change."
     },
     {
-      "command": "openspec validate recover-retained-test-databases --strict --no-interactive; node_modules/.bin/prettier --check openspec/changes/recover-retained-test-databases src/database package.json package-lock.json .github/workflows/test.yml; git diff --check",
-      "result": "Pass. Final task/checkpoint metadata is formatted and validated separately before handoff.",
-      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d implementation, proposal and configuration; final metadata-only checks follow.",
-      "invalidatedBy": "Checked files, formatter/OpenSpec dependencies or configuration change."
+      "command": "node_modules/.bin/eslint 'src/**/*.ts'; node_modules/.bin/prettier --check src/database openspec/changes/recover-retained-test-databases package.json package-lock.json .github/workflows/test.yml; openspec validate recover-retained-test-databases --strict --no-interactive; git diff --check",
+      "result": "Pass: full read-only lint, formatting, strict OpenSpec validation and diff checks. Hooks run on each commit. Final metadata formatting/validation and disclosure scan run again before publication.",
+      "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
+      "invalidatedBy": "Checked files, dependencies or lint/formatter/OpenSpec configuration change."
     },
     {
-      "command": "git diff origin/main --name-only; compare createProductionConfiguration with origin/main; fixture-identity disclosure scan",
-      "result": "Production configuration method matches main exactly. Auth/AI/release workflow files are unchanged. Scan over changed branch files, commit messages and PR text finds no acquired fixture identity disclosures; final scan follows metadata and PR updates.",
-      "testedInput": "origin/main 6df1f037bab65ee6607985bd49b32df8da49f95d through c3aeca85327876f8d69611a09fd24947d9eb710d; native journals remain restricted scratch.",
-      "invalidatedBy": "Relevant source/diff/commit/PR text changes or new disclosure input requires rechecking."
+      "command": "gh pr view 16 --json headRefOid,statusCheckRollup",
+      "result": "Both Run tests checks pass for the implementation commit. Push run 39377019461 and pull-request run 39377026353 are SUCCESS. Final metadata-only head checks are reread before handoff and recorded on the issue.",
+      "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378",
+      "invalidatedBy": "PR head changes require a fresh check read; neither a prior run nor unchanged source implies final-head CI success."
+    },
+    {
+      "command": "Compare createProductionConfiguration tail with origin/main; inspect changed paths; safe-ticket-dispatch disclosure-scan",
+      "result": "Production configuration matches main exactly. Auth/JWT/session, AI prompt/token and release workflow paths are unchanged. Two generic connection-string scan hits were inspected as synthetic local fixture URLs, then the scan was narrowed to the protected consumer name and internal ticket references; no findings. Final full branch/commit/PR scan follows metadata edits.",
+      "testedInput": "origin/main 6df1f037bab65ee6607985bd49b32df8da49f95d through c6c4e2ebf04eb61a82566ddf50d134c339a74378",
+      "invalidatedBy": "Relevant source, branch/commit/PR text or protected disclosure inputs change."
     }
   ]
 }
