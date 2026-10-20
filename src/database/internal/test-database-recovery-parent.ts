@@ -159,6 +159,23 @@ export async function superviseRecovery(
     Math.max(0, workDeadline - performance.now()),
   )
   const accept = (observation: RecoveryObservation) => {
+    const primary = observation.failures.find(
+      (failure) => failure.code !== "CLOSE_FAILED",
+    )
+    if (
+      (primary &&
+        primary.phase !== phase &&
+        !(
+          primary.code === "INVALID_INPUT" &&
+          primary.phase === "validate" &&
+          phase === "connect"
+        )) ||
+      ((observation.outcome === "removed" ||
+        observation.outcome === "already-absent") &&
+        primary) ||
+      (observation.outcome === "unknown" && !primary)
+    )
+      return false
     if (
       (observation.outcome === "removed" &&
         (!permitted || phase !== "verify")) ||

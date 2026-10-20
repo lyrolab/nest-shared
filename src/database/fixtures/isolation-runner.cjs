@@ -101,6 +101,22 @@ function childFixture() {
   process.send = (message, ...args) => {
     if (scenario.badReady && message.type === "ready")
       message = { version: 99, type: "ready" }
+    if (scenario.malformedClosing && message.type === "closing")
+      message = {
+        ...message,
+        failures: [{ code: "CANCELLED", phase: "inspect" }],
+      }
+    if (
+      scenario.duplicateFailure &&
+      ["closing", "result"].includes(message.type)
+    )
+      message = {
+        ...message,
+        failures: [
+          { code: "DATABASE_FAILURE", phase: "connect" },
+          { code: "DATABASE_FAILURE", phase: "connect" },
+        ],
+      }
     const result = originalSend(message, ...args)
     if (scenario.duplicateReady && message.type === "ready")
       originalSend(message)

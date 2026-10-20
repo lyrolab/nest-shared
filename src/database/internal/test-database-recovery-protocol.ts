@@ -106,7 +106,17 @@ function observation(value: unknown): boolean {
       value.outcome as string,
     ) &&
     Array.isArray(failures) &&
-    failures.length <= 3 &&
+    failures.length <= 2 &&
+    new Set(failures.map((entry) => (entry as { code?: unknown })?.code))
+      .size === failures.length &&
+    failures.filter(
+      (entry) => (entry as { code?: unknown })?.code !== "CLOSE_FAILED",
+    ).length <= 1 &&
+    !failures.some(
+      (entry, index) =>
+        (entry as { code?: unknown })?.code === "CLOSE_FAILED" &&
+        index !== failures.length - 1,
+    ) &&
     failures.every(
       (entry: unknown) =>
         shape(entry, ["code", "phase"]) &&

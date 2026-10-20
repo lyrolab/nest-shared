@@ -188,5 +188,20 @@
     "name": "parent-pool-contention",
     "parentPool": true,
     "status": "removed"
+  },
+  {
+    "name": "impossible-verified-failure",
+    "malformedClosing": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown",
+    "forced": true
+  },
+  {
+    "name": "duplicate-primary-failure",
+    "duplicateFailure": true,
+    "rejectConnect": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
   }
 ]
