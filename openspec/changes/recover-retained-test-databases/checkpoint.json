@@ -1,30 +1,30 @@
 {
   "stage": "apply",
-  "remaining": "WIP: 3/17 tasks complete (1.1, 1.2, 2.2). Next complete 2.1 and integrate the lifetime base-session advisory lease and partial-failure/retry state into SharedDatabaseModule (2.3-2.4). Harden remaining work/close budget and fault combinations (3.1-3.4), then native public-package two-process tests, declaration smoke, CI, README and full checks (4-5). Recovery is not ready to release: normal lifecycle does not yet participate in the advisory lock. Preserve the existing proposal and transport proof. Keep the same issue/owner/branch/draft PR. No native recovery or completed apply stage is claimed.",
+  "remaining": "WIP: 8/17 tasks checked (1.1, 1.2, 2.1, 2.2, 3.2, 4.1, 4.4, 5.1). Lifetime base-session advisory lease is implemented and injected lifecycle regressions pass. Finish native setup/schema/clear/close/recreate races, real lease-loss and retained partial-cleanup retry (2.3-2.4, 4.3); complete ambiguous actual binding/catalog checks and remaining deadline/close/uncertain post-DROP fault combinations (3.1, 3.3-3.4); extend native public recovery to quoted/UTF-8 bases and real barriers/cancellation/concurrent recoveries (4.2-4.3). Recheck defensive native fixture cleanup added after the passing native input, run final full tests/build/lint, update PR apply marker and hand off only when complete (5.2-5.3). Keep same issue/owner/branch/draft PR. No release or consumer readiness claim. The owned local PostgreSQL container was removed at checkpoint; recreate an owned PostgreSQL 16 container following the README. No credential or database identity belongs in public evidence.",
   "verification": [
     {
-      "command": "TMPDIR=\"$PAPERCLIP_RUN_SCRATCH_DIR\" npm test -- --runInBand src/database/shared-database.module.spec.ts",
-      "result": "Pass: 73 tests in the existing generic database runner, including 13 implemented-helper transport scenarios; natural child exits before fixture cleanup, zero unhandled rejections. Injected recovery checks cover original identity, validation, safe failure/close combinations, retained uncertainty and cancellation with no late DROP. No native PostgreSQL coverage ran.",
-      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
-      "invalidatedBy": "Changes to database source/fixtures, package dependencies, TypeScript/Jest configuration or runtime; compiled helper must match source for transport cases."
+      "command": "DATABASE_URL=<owned disposable local PostgreSQL 16> TMPDIR=\"$PAPERCLIP_RUN_SCRATCH_DIR\" RUNNER_TEMP=\"$PAPERCLIP_RUN_SCRATCH_DIR\" npm test -- --runInBand src/database",
+      "result": "Pass: 112/112, 3 suites, no skips, 260.449 seconds. 29 native cases include migrations/Nest/factory/worker/natural failure regressions and 11 new public-package recovery cases. Real creators persist mode-0600 original info/OID; retained cases terminate the creator before a distinct recovery process. Recovery uses a harness-owned non-superuser direct owner. Removed/idempotent retry, active lease refusal, live sibling sentinel, no-OID/malformed/name/base/role/owner/OID mismatch, rename, replacement and connected-target refusal pass. All recovery children exit naturally. 80 unit cases include 13 implemented-helper plaintext/TLS transport scenarios and declaration smoke; 3 CLI cases pass. No native lifecycle-race/lease-loss/deadline acceptance is claimed.",
+      "testedInput": "Production source, native scenario logic and fixtures at 9871e243674c7fd9536948b2cebc2de76fbedf06; compiled public package built at that commit. Unit suite loaded the current public-types fixture and smoke after native completion. Added CI absence guard and defensive native failure-path cleanup after the native suite loaded: that cleanup change needs next native verification. Current database/manifests/config/workflow input SHA-256 8959837246b0a84ba5e16c27e22d62d7316842ab429f879982e38b43d52734cc",
+      "invalidatedBy": "Changes to database code, fixture scenarios/cleanup, dependencies, compiler/Jest configuration, runtime or server. Native guard/defensive cleanup changes are explicitly outside the reused native input; verify them with remaining native work."
     },
     {
       "command": "npm run build",
-      "result": "Pass at ebf25ad. This build supplies the unchanged session helper used by the 13 transport scenarios. Later edits to API/input capture require a new build.",
-      "testedInput": "Commit ebf25ad; session helper has not changed since that build.",
-      "invalidatedBy": "Any source or compiler/dependency edit for whole-build evidence; session helper/runtime/driver/fixture edits for transport reuse."
+      "result": "Pass. Public database JS/declarations built, fixtures excluded.",
+      "testedInput": "9871e243674c7fd9536948b2cebc2de76fbedf06; no production source, package dependency or build configuration change since.",
+      "invalidatedBy": "Production source, dependencies or compiler/build configuration changes."
     },
     {
-      "command": "node_modules/.bin/eslint src/database/helpers/test-database-{identity,recovery-input,session}.ts src/database/recover-test-database.ts src/database/shared-database.module.spec.ts src/database/test-database-recovery-error.ts",
-      "result": "Pass, no warnings or errors.",
-      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
-      "invalidatedBy": "Edits to checked files, TypeScript dependencies or lint configuration."
+      "command": "node_modules/.bin/tsc -p src/database/fixtures/public-types/tsconfig.json; node_modules/.bin/eslint src/database/fixtures/public-types/recovery.ts src/database/shared-database.module.spec.ts src/database/shared-database.integration.spec.ts",
+      "result": "Pass. Node16 consumer smoke resolves the built package export through its own tsconfig; lint passes without suppressions.",
+      "testedInput": "Current public-types consumer fixture and checked specs; production declarations built at 9871e24. Native spec defensive cleanup only changed later; final lint must include it.",
+      "invalidatedBy": "Checked source/configuration/declarations or TypeScript/lint dependency changes."
     },
     {
-      "command": "node_modules/.bin/prettier --check src/database/helpers/test-database-*.ts src/database/recover-test-database.ts src/database/shared-database.module.spec.ts src/database/test-database-recovery-error.ts src/database/fixtures/transport-runner.cjs src/database/fixtures/transport-scenarios.json",
-      "result": "Pass.",
-      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
-      "invalidatedBy": "Edits to the checked files or formatter configuration."
+      "command": "CI=true with DATABASE_URL removed in a child environment: Jest native integration runner; build fixture exclusion assertion",
+      "result": "Expected failure is confirmed for the exact missing-prerequisite message, preventing CI skips; dist/database/fixtures is absent.",
+      "testedInput": "Current CI prerequisite guard, current compiled build at 9871e24.",
+      "invalidatedBy": "Guard, test discovery, build exclusion or CI workflow changes."
     }
   ]
 }

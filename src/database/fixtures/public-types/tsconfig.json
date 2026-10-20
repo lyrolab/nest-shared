@@ -1,0 +1,14 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "noEmit": true,
+    "incremental": false,
+    "strict": true,
+    "rootDir": ".",
+    "outDir": "./unused"
+  },
+  "include": ["recovery.ts"],
+  "exclude": []
+}

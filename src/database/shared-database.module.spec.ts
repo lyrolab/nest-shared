@@ -1012,6 +1012,18 @@ describe("retained test database recovery public contract", () => {
     }
   }, 35000)
 
+  it("exports usable declarations through the built public package subpath", async () => {
+    await promisify(execFile)(
+      process.execPath,
+      [
+        require.resolve("typescript/bin/tsc"),
+        "--project",
+        join(__dirname, "fixtures/public-types/tsconfig.json"),
+      ],
+      { timeout: 30_000 },
+    )
+  }, 35_000)
+
   it("does not load the optional driver while importing the public database module", () => {
     jest.isolateModules(() => {
       const load = jest.fn(() => {

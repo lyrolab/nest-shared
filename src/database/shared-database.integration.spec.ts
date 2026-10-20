@@ -16,6 +16,8 @@ import { Person, Tag, Note, Entry } from "./fixtures/records.entity"
 
 const environment = new ConfigService()
 const suppliedUrl = environment.get<string>("DATABASE_URL")
+if (environment.get("CI") && !suppliedUrl)
+  throw new Error("CI requires DATABASE_URL for native database acceptance")
 let databaseUrl = suppliedUrl
 const integration = databaseUrl ? describe : describe.skip
 function targetUrl(base: string, name: string) {
@@ -100,7 +102,15 @@ integration("owned PostgreSQL public boundary", () => {
   })
 
   afterAll(async () => {
-    for (const child of children) child.kill("SIGKILL")
+    await Promise.all(
+      [...children].map(async (child) => {
+        const exited = new Promise<void>((resolveExit) =>
+          child.once("exit", () => resolveExit()),
+        )
+        child.kill("SIGKILL")
+        await exited
+      }),
+    )
     try {
       for (const name of externalDatabases) {
         const rows = await admin.query<{ oid: number }[]>(
@@ -659,24 +669,27 @@ integration("owned PostgreSQL public boundary", () => {
         Object.assign(input, {
           base: { databaseUrl: recoveryBaseUrl, expectedRole: "foreign" },
         })
-      expect(await freshRecovery(input)).toMatchObject({
-        failure: {
-          code,
-          outcome: mutation === "connected" ? "unknown" : "not-attempted",
-        },
-      })
-      const target = await new DataSource({
-        type: "postgres",
-        url: targetUrl(databaseUrl!, renamed ?? name),
-      }).initialize()
       try {
-        expect(await target.query("SELECT id FROM sentinel")).toEqual([
-          { id: 7 },
-        ])
+        expect(await freshRecovery(input)).toMatchObject({
+          failure: {
+            code,
+            outcome: mutation === "connected" ? "unknown" : "not-attempted",
+          },
+        })
+        const target = await new DataSource({
+          type: "postgres",
+          url: targetUrl(databaseUrl!, renamed ?? name),
+        }).initialize()
+        try {
+          expect(await target.query("SELECT id FROM sentinel")).toEqual([
+            { id: 7 },
+          ])
+        } finally {
+          await target.destroy()
+        }
       } finally {
-        await target.destroy()
+        if (peer?.isInitialized) await peer.destroy()
       }
-      if (peer) await peer.destroy()
       if (renamed) {
         await admin.query(
           `ALTER DATABASE ${quote(renamed)} RENAME TO ${quote(name)}`,
