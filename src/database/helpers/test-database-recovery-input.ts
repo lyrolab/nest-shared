@@ -36,6 +36,48 @@ function record(value: unknown, fields: readonly string[]): boolean {
   )
 }
 
+export function captureTestDatabaseBase(
+  databaseUrl: string,
+  expectedRole: string,
+) {
+  try {
+    const url = new URL(databaseUrl)
+    const baseName = decodeURIComponent(url.pathname.slice(1))
+    const role = decodeURIComponent(url.username)
+    const password = decodeURIComponent(url.password)
+    if (
+      !["postgres:", "postgresql:"].includes(url.protocol) ||
+      !url.hostname ||
+      url.hostname.includes("%") ||
+      !validText(baseName) ||
+      !validText(role) ||
+      !validText(password, true) ||
+      url.hash ||
+      (url.port && (Number(url.port) < 1 || Number(url.port) > 65535)) ||
+      role !== expectedRole
+    )
+      refuse("INVALID_INPUT")
+    // Binding/transport options must not override the explicit URL identity.
+    const tlsKeys = new Set(["sslmode", "sslcert", "sslkey", "sslrootcert"])
+    const seen = new Set<string>()
+    for (const [key, value] of url.searchParams) {
+      if (!tlsKeys.has(key) || seen.has(key) || !validText(value))
+        refuse("INVALID_INPUT")
+      seen.add(key)
+    }
+    const sslmode = url.searchParams.get("sslmode")
+    if (
+      sslmode !== null &&
+      !["disable", "require", "verify-ca", "verify-full"].includes(sslmode)
+    )
+      refuse("INVALID_INPUT")
+    return { databaseUrl, baseName, expectedRole }
+  } catch (error) {
+    if (error instanceof TestDatabaseRecoveryError) throw error
+    refuse("INVALID_INPUT")
+  }
+}
+
 export function captureRecoveryInput(options: RecoverTestDatabaseOptions) {
   try {
     if (
@@ -76,36 +118,7 @@ export function captureRecoveryInput(options: RecoverTestDatabaseOptions) {
       refuse("INVALID_INPUT")
     const timeoutMs = budget(options.timeoutMs, 30_000, 300_000)
     const closeTimeoutMs = budget(options.closeTimeoutMs, 5_000, 30_000)
-    const url = new URL(databaseUrl)
-    const baseName = decodeURIComponent(url.pathname.slice(1))
-    const role = decodeURIComponent(url.username)
-    const password = decodeURIComponent(url.password)
-    if (
-      !["postgres:", "postgresql:"].includes(url.protocol) ||
-      !url.hostname ||
-      url.hostname.includes("%") ||
-      !validText(baseName) ||
-      !validText(role) ||
-      !validText(password, true) ||
-      url.hash ||
-      (url.port && (Number(url.port) < 1 || Number(url.port) > 65535)) ||
-      role !== expectedRole
-    )
-      refuse("INVALID_INPUT")
-    // Binding/transport options must not override the explicit URL identity.
-    const tlsKeys = new Set(["sslmode", "sslcert", "sslkey", "sslrootcert"])
-    const seen = new Set<string>()
-    for (const [key, value] of url.searchParams) {
-      if (!tlsKeys.has(key) || seen.has(key) || !validText(value))
-        refuse("INVALID_INPUT")
-      seen.add(key)
-    }
-    const sslmode = url.searchParams.get("sslmode")
-    if (
-      sslmode !== null &&
-      !["disable", "require", "verify-ca", "verify-full"].includes(sslmode)
-    )
-      refuse("INVALID_INPUT")
+    const { baseName } = captureTestDatabaseBase(databaseUrl, expectedRole)
     if (
       databaseName === baseName ||
       ["postgres", "template0", "template1"].includes(databaseName) ||

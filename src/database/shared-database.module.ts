@@ -17,6 +17,7 @@ import {
   testDatabaseLockKey,
 } from "./helpers/test-database-identity"
 
+import { captureTestDatabaseBase } from "./helpers/test-database-recovery-input"
 import { TestDatabaseSession } from "./helpers/test-database-session"
 import { TestDatabaseRecoveryError } from "./test-database-recovery-error"
 
@@ -319,8 +320,11 @@ export class SharedDatabaseModule {
     if (this.lease?.healthy && this.leaseLocked) return
     if (this.lease) await this.closeLease()
     const url = new URL(this.configuration!.baseUrl)
-    const base = decodeURIComponent(url.pathname.slice(1))
     const role = decodeURIComponent(url.username)
+    const { baseName: base } = captureTestDatabaseBase(
+      this.configuration!.baseUrl,
+      role,
+    )
     this.lease = await TestDatabaseSession.create(this.configuration!.baseUrl)
     await this.lease.connect(30_000)
     const rows = await this.adminQuery<{

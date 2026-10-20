@@ -2,8 +2,9 @@ import { ConfigModule, ConfigService } from "@nestjs/config"
 import { Test, TestingModule } from "@nestjs/testing"
 import { DataSource } from "typeorm"
 import { randomUUID } from "node:crypto"
-import { spawn, ChildProcess } from "node:child_process"
+import { spawn, fork, ChildProcess, Serializable } from "node:child_process"
 import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 import {
   createTestDatabaseInvocation,
@@ -29,6 +30,9 @@ integration("owned PostgreSQL public boundary", () => {
   let serverAdmin: DataSource
   const fixtureBase = `fixture_${randomUUID().replaceAll("-", "")}`
   let fixtureCreated = false
+  const recoveryRole = `fixture_role_${randomUUID().replaceAll("-", "")}`
+  let recoveryBaseUrl: string
+  let roleCreated = false
   const recordedDatabases = new Set<string>()
   let app: TestingModule | undefined
   let scratch: string
@@ -67,6 +71,15 @@ integration("owned PostgreSQL public boundary", () => {
       "CREATE TABLE public.base_sentinel (id integer PRIMARY KEY)",
     )
     await admin.query("INSERT INTO public.base_sentinel VALUES (1)")
+    const password = randomUUID()
+    await admin.query(
+      `CREATE ROLE ${quote(recoveryRole)} LOGIN CREATEDB PASSWORD '${password}'`,
+    )
+    roleCreated = true
+    const recoveryUrl = new URL(databaseUrl)
+    recoveryUrl.username = recoveryRole
+    recoveryUrl.password = password
+    recoveryBaseUrl = recoveryUrl.toString()
   })
 
   afterEach(async () => {
@@ -89,8 +102,13 @@ integration("owned PostgreSQL public boundary", () => {
   afterAll(async () => {
     for (const child of children) child.kill("SIGKILL")
     try {
-      for (const name of externalDatabases)
-        await admin.query(`DROP DATABASE ${quote(name)}`)
+      for (const name of externalDatabases) {
+        const rows = await admin.query<{ oid: number }[]>(
+          "SELECT oid FROM pg_database WHERE datname = $1",
+          [name],
+        )
+        if (rows.length) await admin.query(`DROP DATABASE ${quote(name)}`)
+      }
       expect(
         await admin.query<{ id: number }[]>(
           "SELECT id FROM public.base_sentinel",
@@ -117,6 +135,8 @@ integration("owned PostgreSQL public boundary", () => {
       try {
         if (fixtureCreated)
           await serverAdmin.query(`DROP DATABASE ${quote(fixtureBase)}`)
+        if (roleCreated)
+          await serverAdmin.query(`DROP ROLE ${quote(recoveryRole)}`)
       } finally {
         if (serverAdmin?.isInitialized) await serverAdmin.destroy()
       }
@@ -269,7 +289,7 @@ integration("owned PostgreSQL public boundary", () => {
         Database.setupTestDatabase(
           new ConfigService({ DATABASE_URL: databaseUrl }),
         ),
-      ).rejects.toThrow(/already exists/)
+      ).rejects.toMatchObject({ code: "DATABASE_FAILURE" })
       await Database.clearTestDatabase()
       await Database.closeTestConnection()
       expect(
@@ -290,9 +310,9 @@ integration("owned PostgreSQL public boundary", () => {
       url: targetUrl(databaseUrl!, info.databaseName),
     }).initialize()
     try {
-      await expect(Database.resetTestDatabase()).rejects.toThrow(
-        /being accessed/,
-      )
+      await expect(Database.resetTestDatabase()).rejects.toMatchObject({
+        code: "DATABASE_FAILURE",
+      })
       expect(factory.isInitialized).toBe(false)
       expect(nest.isInitialized).toBe(false)
       expect(Database.initializeTestInvocation().namespace).toBe(info.namespace)
@@ -416,6 +436,271 @@ integration("owned PostgreSQL public boundary", () => {
     await Database.closeTestConnection()
     await absent(info.databaseName)
   })
+
+  function ordinaryChild(mode: "creator" | "recovery") {
+    const child = fork(
+      join(__dirname, "fixtures/recovery-runner.cjs"),
+      [mode],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, DATABASE_URL: recoveryBaseUrl },
+        stdio: ["ignore", "ignore", "ignore", "ipc"],
+      },
+    )
+    children.add(child)
+    const messages: unknown[] = []
+    const waiters: Array<(value: unknown) => void> = []
+    child.on("message", (message) => {
+      const waiter = waiters.shift()
+      if (waiter) waiter(message)
+      else messages.push(message)
+    })
+    const exit = new Promise<{
+      code: number | null
+      signal: NodeJS.Signals | null
+    }>((resolveExit) => {
+      child.once("exit", (code, signal) => {
+        children.delete(child)
+        resolveExit({ code, signal })
+      })
+    })
+    return {
+      child,
+      exit,
+      async message<T>(): Promise<T> {
+        if (messages.length) return messages.shift() as T
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          return await Promise.race([
+            new Promise<T>((resolveMessage) =>
+              waiters.push((value) => resolveMessage(value as T)),
+            ),
+            exit.then(() => {
+              throw new Error("Fixture exited before its message")
+            }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("Fixture message deadline")),
+                15000,
+              )
+            }),
+          ])
+        } finally {
+          clearTimeout(timer)
+        }
+      },
+    }
+  }
+
+  async function retainedCreator() {
+    const run = ordinaryChild("creator")
+    const { ready } = await run.message<{
+      ready: {
+        database: TestDatabaseInfo
+        acquiredOid: number
+        exclusiveTarget: true
+      }
+    }>()
+    expect(ready).toBeDefined()
+    recordedDatabases.add(ready.database.databaseName)
+    externalDatabases.add(ready.database.databaseName)
+    const savedPath = join(scratch, `acquired-${randomUUID()}.json`)
+    await writeFile(savedPath, JSON.stringify(ready), { mode: 0o600 })
+    const saved = JSON.parse(await readFile(savedPath, "utf8")) as typeof ready
+    return { ...run, input: saved }
+  }
+
+  async function stopCreator(run: Awaited<ReturnType<typeof retainedCreator>>) {
+    run.child.kill("SIGKILL")
+    expect((await run.exit).signal).toBe("SIGKILL")
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
+      const [{ count }] = await admin.query<{ count: string }[]>(
+        "SELECT count(*) FROM pg_stat_activity WHERE datname = $1",
+        [run.input.database.databaseName],
+      )
+      if (count === "0") return
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20))
+    }
+    throw new Error("Creator connection did not leave")
+  }
+
+  async function freshRecovery(input: Serializable) {
+    const run = ordinaryChild("recovery")
+    run.child.send(input)
+    const result = await run.message<{
+      result?: { status: string }
+      failure?: { code: string; outcome: string }
+    }>()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      expect(
+        await Promise.race([
+          run.exit,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              run.child.kill("SIGKILL")
+              reject(new Error("Recovery failed to exit naturally"))
+            }, 5000)
+          }),
+        ]),
+      ).toEqual({ code: 0, signal: null })
+    } finally {
+      clearTimeout(timer)
+    }
+    return result
+  }
+
+  it("recovers a terminated creator through a fresh public-package process and retries idempotently", async () => {
+    const creator = await retainedCreator()
+    const sibling = await retainedCreator()
+    try {
+      expect(await freshRecovery(creator.input)).toMatchObject({
+        failure: { code: "BUSY", outcome: "not-attempted" },
+      })
+      creator.child.send("clear")
+      expect(await creator.message()).toEqual({ cleared: true })
+      expect(await freshRecovery(creator.input)).toMatchObject({
+        failure: { code: "BUSY" },
+      })
+      await stopCreator(creator)
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "removed" },
+      })
+      externalDatabases.delete(creator.input.database.databaseName)
+      await absent(creator.input.database.databaseName)
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "already-absent" },
+      })
+      sibling.child.send("sentinel")
+      expect(await sibling.message()).toEqual({ sentinel: [{ id: 7 }] })
+      sibling.child.send("close")
+      expect(await sibling.message()).toEqual({ closed: true })
+      expect(await sibling.exit).toEqual({ code: 0, signal: null })
+      externalDatabases.delete(sibling.input.database.databaseName)
+      expect(await freshRecovery(sibling.input)).toEqual({
+        result: { status: "already-absent" },
+      })
+      evidence.push({
+        mode: "fresh-public-recovery",
+        removed: 1,
+        alreadyAbsent: 2,
+        busy: 2,
+        siblingSentinel: "preserved",
+        recoveryNaturalExits: 5,
+        normalCreatorNaturalExits: 1,
+      })
+    } finally {
+      for (const run of [creator, sibling])
+        if (children.has(run.child)) {
+          run.child.kill("SIGKILL")
+          await run.exit
+        }
+    }
+  }, 60000)
+
+  const recoveryScenarios = JSON.parse(
+    readFileSync(join(__dirname, "fixtures/recovery-scenarios.json"), "utf8"),
+  ) as Array<{ name: string; mutation: string; code: string }>
+  it.each(recoveryScenarios)(
+    "preserves the retained sentinel for $name",
+    async ({ mutation, code }) => {
+      const creator = await retainedCreator()
+      await stopCreator(creator)
+      const input = structuredClone(creator.input)
+      if (mutation === "missing-oid")
+        delete (input as { acquiredOid?: number }).acquiredOid
+      if (mutation === "wrong-oid") input.acquiredOid++
+      if (mutation === "wrong-name")
+        input.database = { ...input.database, databaseName: "foreign" }
+      if (mutation === "malformed")
+        input.database = { ...input.database, namespace: "" }
+      const name = creator.input.database.databaseName
+      let renamed: string | undefined
+      let peer: DataSource | undefined
+      if (mutation === "replacement") {
+        await admin.query(`DROP DATABASE ${quote(name)}`)
+        await admin.query(
+          `CREATE DATABASE ${quote(name)} OWNER ${quote(recoveryRole)}`,
+        )
+        const source = await new DataSource({
+          type: "postgres",
+          url: targetUrl(databaseUrl!, name),
+        }).initialize()
+        await source.query("CREATE TABLE sentinel (id integer)")
+        await source.query("INSERT INTO sentinel VALUES (7)")
+        await source.destroy()
+      }
+      if (mutation === "rename") {
+        renamed = `renamed_${randomUUID().replaceAll("-", "")}`
+        await admin.query(
+          `ALTER DATABASE ${quote(name)} RENAME TO ${quote(renamed)}`,
+        )
+        externalDatabases.delete(name)
+        externalDatabases.add(renamed)
+      }
+      if (mutation === "owner")
+        await admin.query(
+          `ALTER DATABASE ${quote(name)} OWNER TO ${quote(decodeURIComponent(new URL(databaseUrl!).username))}`,
+        )
+      if (mutation === "connected")
+        peer = await new DataSource({
+          type: "postgres",
+          url: targetUrl(databaseUrl!, name),
+        }).initialize()
+      if (mutation === "base")
+        Object.assign(input, {
+          base: {
+            databaseUrl: targetUrl(recoveryBaseUrl, "postgres"),
+            expectedRole: recoveryRole,
+          },
+        })
+      if (mutation === "role")
+        Object.assign(input, {
+          base: { databaseUrl: recoveryBaseUrl, expectedRole: "foreign" },
+        })
+      expect(await freshRecovery(input)).toMatchObject({
+        failure: {
+          code,
+          outcome: mutation === "connected" ? "unknown" : "not-attempted",
+        },
+      })
+      const target = await new DataSource({
+        type: "postgres",
+        url: targetUrl(databaseUrl!, renamed ?? name),
+      }).initialize()
+      try {
+        expect(await target.query("SELECT id FROM sentinel")).toEqual([
+          { id: 7 },
+        ])
+      } finally {
+        await target.destroy()
+      }
+      if (peer) await peer.destroy()
+      if (renamed) {
+        await admin.query(
+          `ALTER DATABASE ${quote(renamed)} RENAME TO ${quote(name)}`,
+        )
+        externalDatabases.delete(renamed)
+        externalDatabases.add(name)
+      }
+      if (mutation === "owner")
+        await admin.query(
+          `ALTER DATABASE ${quote(name)} OWNER TO ${quote(recoveryRole)}`,
+        )
+      if (mutation === "replacement") {
+        await admin.query(`DROP DATABASE ${quote(name)}`)
+        expect(await freshRecovery(creator.input)).toEqual({
+          result: { status: "already-absent" },
+        })
+      } else
+        expect(await freshRecovery(creator.input)).toEqual({
+          result: { status: "removed" },
+        })
+      externalDatabases.delete(name)
+    },
+    30000,
+  )
 
   async function waitForFile(
     path: string,

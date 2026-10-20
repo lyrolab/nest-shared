@@ -4,6 +4,7 @@ import { DataSource } from "typeorm"
 import { basename, join } from "node:path"
 import { access, writeFile } from "node:fs/promises"
 import { SharedDatabaseModule as Database } from "../index"
+import { TestDatabaseSession } from "../helpers/test-database-session"
 import { Entry, Note } from "./records.entity"
 import { FailingSchema1700000000001 } from "./failing.migration"
 
@@ -44,7 +45,16 @@ export function runScenario(): void {
   let factory: DataSource | undefined
   let nest: DataSource | undefined
   let ownerNames: { factory: string; nest: string } | undefined
+  const sessions: TestDatabaseSession[] = []
   beforeAll(async () => {
+    const create = TestDatabaseSession.create.bind(TestDatabaseSession)
+    jest
+      .spyOn(TestDatabaseSession, "create")
+      .mockImplementation(async (url) => {
+        const session = await create(url)
+        sessions.push(session)
+        return session
+      })
     const database = Database.forTest({
       entities: [Entry, Note],
       ...(scenario.mode === "setup-fail"
@@ -57,21 +67,23 @@ export function runScenario(): void {
       JSON.stringify(info),
     )
     if (scenario.mode === "oid-fail") {
-      const query = jest.spyOn(DataSource.prototype, "query")
+      const query = jest.spyOn(TestDatabaseSession.prototype, "query")
       const originalQuery = query.getMockImplementation()!
       query.mockImplementation(function (
-        this: DataSource,
-        sql: string,
-        parameters?: unknown[],
+        this: TestDatabaseSession,
+        sql,
+        parameters,
+        phase,
+        timeout,
       ) {
         if (sql.startsWith("SELECT oid"))
           return Promise.reject(new Error("intentional catalog failure"))
-        return originalQuery.call(this, sql, parameters)
+        return originalQuery.call(this, sql, parameters, phase, timeout)
       })
     }
     if (scenario.mode === "admin-destroy-fail")
       jest
-        .spyOn(DataSource.prototype, "destroy")
+        .spyOn(TestDatabaseSession.prototype, "close")
         .mockRejectedValueOnce(new Error("intentional admin destroy failure"))
     app = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), database],
@@ -181,6 +193,14 @@ export function runScenario(): void {
         await Database.closeTestConnection()
       } catch (retryError) {
         errors.push(retryError)
+      }
+    }
+    // Refusal fixtures keep evidence for the parent; release their owned transports.
+    for (const session of sessions) {
+      try {
+        await session.close(5000)
+      } catch (error) {
+        errors.push(error)
       }
     }
     await writeFile(
