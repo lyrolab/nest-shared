@@ -6,7 +6,10 @@ const crypto = require("node:crypto")
 
 const root = path.resolve(__dirname, "../../..")
 const scratch =
-  process.env.PAPERCLIP_RUN_SCRATCH_DIR ?? process.env.PAPERCLIP_SCRATCH_DIR
+  process.env.PAPERCLIP_RUN_SCRATCH_DIR ??
+  process.env.PAPERCLIP_SCRATCH_DIR ??
+  process.env.RUNNER_TEMP ??
+  require("node:os").tmpdir()
 assert.ok(scratch)
 const directory = fs.mkdtempSync(path.join(scratch, "packed public API "))
 const lock = require(path.join(root, "package-lock.json"))
@@ -40,6 +43,9 @@ async function main() {
       (entry) =>
         entry.path === "dist/database/internal/test-database-recovery-child.js",
     ),
+  )
+  assert.ok(
+    packed.files.some((entry) => entry.path === "src/database/README.md"),
   )
   assert.ok(!packed.files.some((entry) => /(^|\/)fixtures\//.test(entry.path)))
   fs.writeFileSync(
