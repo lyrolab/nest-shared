@@ -38,6 +38,8 @@ function settled(promise) {
 }
 
 async function child(scenario, port, certificateDir) {
+  if (scenario.phase === "configuration")
+    return configurationChild(scenario, port, certificateDir)
   const host = scenario.ip ? "127.0.0.1" : "localhost"
   const url = new URL(`postgres://probe:probe@${host}:${port}/probe`)
   if (scenario.tls) {
@@ -101,6 +103,126 @@ async function child(scenario, port, certificateDir) {
       closeFailed,
       dispatches,
       unhandled,
+    }),
+  )
+}
+
+async function configurationChild(scenario, port, certificateDir) {
+  const { ConfigService } = require("@nestjs/config")
+  const { Client } = require("pg")
+  const {
+    SharedDatabaseModule: Database,
+    recoverTestDatabase,
+  } = require("@lyrolab/nest-shared/database")
+  const controller = new AbortController()
+  let connects = 0
+  let queries = 0
+  let opened = 0
+  let closed = 0
+  let reads = 0
+  let settledReads = 0
+  let abortTimer
+  const originalConnect = Client.prototype.connect
+  const originalQuery = Client.prototype.query
+  Client.prototype.connect = function (...args) {
+    connects++
+    return originalConnect.apply(this, args)
+  }
+  Client.prototype.query = function (...args) {
+    queries++
+    return originalQuery.apply(this, args)
+  }
+  const files = require("node:fs/promises")
+  const originalOpen = files.open
+  files.open = async (...args) => {
+    const file = await originalOpen(...args)
+    opened++
+    const originalRead = file.readFile.bind(file)
+    const originalClose = file.close.bind(file)
+    file.close = async () => {
+      await originalClose()
+      closed++
+    }
+    if (scenario.file === "regular") {
+      file.readFile = async ({ signal }) => {
+        reads++
+        if (scenario.mode === "cancel")
+          abortTimer = setTimeout(() => controller.abort(), 20)
+        try {
+          // Hold this public file operation until interruption reaches it.
+          if (!signal.aborted)
+            await new Promise((resolve) =>
+              signal.addEventListener("abort", resolve, { once: true }),
+            )
+          return await originalRead({ signal })
+        } finally {
+          settledReads++
+        }
+      }
+    }
+    return file
+  }
+  const url = new URL(`postgres://probe:probe@127.0.0.1:${port}/probe`)
+  url.searchParams.set("sslmode", "verify-full")
+  const filename =
+    scenario.file === "fifo"
+      ? path.join(certificateDir, "input.fifo")
+      : scenario.file === "directory"
+        ? certificateDir
+        : scenario.file === "device"
+          ? "/dev/null"
+          : path.join(certificateDir, "cert.pem")
+  url.searchParams.set(scenario.key, filename)
+  const config = new ConfigService({ DATABASE_URL: url.toString() })
+  const database = Database.getTestDatabaseInfo(config)
+  const started = performance.now()
+  let failure
+  try {
+    await recoverTestDatabase({
+      base: { databaseUrl: url.toString(), expectedRole: "probe" },
+      database,
+      acquiredOid: 42,
+      exclusiveTarget: true,
+      timeoutMs: scenario.mode === "cancel" ? 500 : 40,
+      closeTimeoutMs: 40,
+      signal: controller.signal,
+    })
+    assert.fail("Configuration must refuse before connecting")
+  } catch (error) {
+    failure = error.code
+    assert.equal(error.outcome, "not-attempted")
+    assert.equal(error.phase, "connect")
+  } finally {
+    clearTimeout(abortTimer)
+  }
+  const elapsedMs = Math.ceil(performance.now() - started)
+  assert.equal(
+    failure,
+    scenario.file === "regular"
+      ? scenario.mode === "cancel"
+        ? "CANCELLED"
+        : "DEADLINE_EXCEEDED"
+      : "DATABASE_FAILURE",
+  )
+  assert.ok(elapsedMs < 250)
+  assert.equal(opened, 1)
+  assert.equal(closed, opened)
+  assert.equal(reads, scenario.file === "regular" ? 1 : 0)
+  assert.equal(settledReads, reads)
+  // Wait beyond the work budget to catch any resumed dispatch after return.
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(connects, 0)
+  assert.equal(queries, 0)
+  process.disconnect()
+  console.log(
+    JSON.stringify({
+      closed: true,
+      closeMs: elapsedMs,
+      failure,
+      opened,
+      settledReads,
+      dispatches: connects + queries,
+      unhandled: 0,
     }),
   )
 }
@@ -220,6 +342,7 @@ async function probe(scenario, certificateDir) {
     assert.equal(report.closed, true)
     assert.ok(report.closeMs < closeBudgetMs)
     assert.equal(queries, scenario.phase === "active" ? 1 : 0)
+    if (scenario.phase === "configuration") assert.equal(peers.size, 0)
     if (
       scenario.tls &&
       ["idle", "active", "startup"].includes(scenario.phase)
@@ -291,6 +414,7 @@ async function main() {
       const certDir = path.join(directory, mismatch ? "mismatch" : "valid")
       fs.mkdirSync(certDir, { mode: 0o700 })
       certificate(certDir, mismatch)
+      execFileSync("mkfifo", [path.join(certDir, "input.fifo")])
     }
     console.log(
       JSON.stringify({

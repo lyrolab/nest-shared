@@ -76,5 +76,75 @@
     "phase": "idle",
     "ip": true,
     "forced": true
+  },
+  {
+    "name": "config-fifo-sslrootcert-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslrootcert-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-fifo-sslcert-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslcert-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-fifo-sslkey-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslkey-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-read-deadline",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-read-cancel",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-directory",
+    "phase": "configuration",
+    "file": "directory",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-device",
+    "phase": "configuration",
+    "file": "device",
+    "key": "sslrootcert",
+    "mode": "deadline"
   }
 ]

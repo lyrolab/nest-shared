@@ -22,9 +22,28 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
-async function connectionConfig(databaseUrl: string): Promise<ClientConfig> {
+async function connectionConfig(
+  databaseUrl: string,
+  signal?: AbortSignal,
+): Promise<ClientConfig> {
   const url = new URL(databaseUrl)
-  const { readFile } = await import("node:fs/promises")
+  const { constants } = await import("node:fs")
+  const { open } = await import("node:fs/promises")
+  const readCertificate = async (key: string) => {
+    signal?.throwIfAborted()
+    // Nonblocking open lets us reject a FIFO without waiting for its writer.
+    const file = await open(
+      url.searchParams.get(key)!,
+      constants.O_RDONLY | constants.O_NONBLOCK,
+    )
+    try {
+      signal?.throwIfAborted()
+      if (!(await file.stat()).isFile()) throw interruption()
+      return await file.readFile({ signal })
+    } finally {
+      await file.close()
+    }
+  }
   const ssl =
     url.searchParams.get("sslmode") === "disable"
       ? false
@@ -32,13 +51,13 @@ async function connectionConfig(databaseUrl: string): Promise<ClientConfig> {
         ? {
             rejectUnauthorized: true,
             ...(url.searchParams.has("sslrootcert")
-              ? { ca: await readFile(url.searchParams.get("sslrootcert")!) }
+              ? { ca: await readCertificate("sslrootcert") }
               : {}),
             ...(url.searchParams.has("sslcert")
-              ? { cert: await readFile(url.searchParams.get("sslcert")!) }
+              ? { cert: await readCertificate("sslcert") }
               : {}),
             ...(url.searchParams.has("sslkey")
-              ? { key: await readFile(url.searchParams.get("sslkey")!) }
+              ? { key: await readCertificate("sslkey") }
               : {}),
           }
         : false
@@ -85,14 +104,18 @@ export class TestDatabaseSession {
     client.on("error", this.onError)
   }
 
-  static async create(databaseUrl: string): Promise<TestDatabaseSession> {
+  static async create(
+    databaseUrl: string,
+    signal?: AbortSignal,
+  ): Promise<TestDatabaseSession> {
     const [{ Client }, { Socket }, config] = await Promise.all([
       import("pg"),
       import("node:net"),
-      connectionConfig(databaseUrl),
+      connectionConfig(databaseUrl, signal),
     ])
+    signal?.throwIfAborted()
     const socket = new Socket()
-    const clientConfig = {
+    const clientConfig: ClientConfig = {
       ...config,
       sslnegotiation: "postgres",
       connectionTimeoutMillis: 30_000,

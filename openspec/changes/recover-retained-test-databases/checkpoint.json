@@ -1,6 +1,6 @@
 {
   "stage": "apply",
-  "remaining": "Apply complete: 17/17 tasks. Next owner: Simplifier, on this same issue, branch and PR. Preserve exact identity/direct-owner validation, lifetime lease and retry state, conservative outcomes, and confirmed disposal even when close reports failure. Reviewer returns the open issue to Founding Engineer after merge for actual release verification; no released version or consumer readiness is claimed. No apply continuation is needed.",
+  "remaining": "Reviewer rework in progress. Both fixes and 10 configuration scenarios are implemented but unverified. Next: npm ci against locked dependencies (including @types/pg 8.23.1), build, public API/transport/database/CLI checks on owned PostgreSQL, lint and final CI. No new passing evidence claimed. Prior build/tests are invalidated by source and installed dependency changes. Keep same issue/branch/PR; return to Reviewer after verification per rework procedure.",
   "verification": [
     {
       "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand",

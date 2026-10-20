@@ -114,6 +114,8 @@ An interrupted process can leave its database behind. Use exact recovery below a
 
 `recoverTestDatabase` works in a fresh ordinary Node, Jest or Vitest process. Install `pg ^8.23.1` when using test administration. The administration helper supports Node TCP and pg's PostgreSQL SSLRequest negotiation, with pg TLS and certificate/hostname checks intact. Unix sockets, custom streams, direct TLS negotiation and connection-string binding overrides are refused. Production `forRoot` configuration is independent of these administration bounds.
 
+TLS certificate paths (`sslrootcert`, `sslcert`, `sslkey`) must refer to regular files. Configuration reads share the recovery work deadline and cancellation signal; each opened file closes before loading returns. FIFOs, devices and directories are refused before connecting.
+
 After successful setup, save the original info and a positively observed OID in a restricted record:
 
 ```ts

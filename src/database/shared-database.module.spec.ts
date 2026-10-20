@@ -1076,7 +1076,7 @@ describe("retained test database recovery public contract", () => {
             unhandled: number
           },
       )
-    expect(reports).toHaveLength(13)
+    expect(reports).toHaveLength(23)
     for (const report of reports) {
       expect(report.naturalExitBeforeFixtureCleanup).toBe(true)
       expect(report.exitCode).toBe(0)

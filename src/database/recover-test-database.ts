@@ -49,13 +49,16 @@ export async function recoverTestDatabase(
   let outcome: TestDatabaseRecoveryOutcome = "not-attempted"
   let stopped: TestDatabaseRecoveryCode | undefined
   let session: TestDatabaseSession | undefined
+  const creation = new AbortController()
   const failures: TestDatabaseRecoveryFailure[] = []
   const abort = () => {
     stopped ??= "CANCELLED"
+    creation.abort()
     session?.interrupt()
   }
   const timer = setTimeout(() => {
     stopped ??= "DEADLINE_EXCEEDED"
+    creation.abort()
     session?.interrupt()
   }, input.timeoutMs)
   input.signal?.addEventListener("abort", abort, { once: true })
@@ -84,7 +87,10 @@ export async function recoverTestDatabase(
   }
   try {
     remaining()
-    session = await TestDatabaseSession.create(input.databaseUrl)
+    session = await TestDatabaseSession.create(
+      input.databaseUrl,
+      creation.signal,
+    )
     await session.connect(remaining())
     // Server timeouts limit DDL even if the peer stops returning responses.
     await query(
