@@ -1,5 +1,6 @@
 import type { Client, ClientConfig, QueryResultRow } from "pg"
 import type { Socket } from "node:net"
+import type { TestDatabaseRecoveryTls } from "../recover-test-database"
 import { performance } from "node:perf_hooks"
 import {
   TestDatabaseRecoveryError,
@@ -25,8 +26,51 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
 async function connectionConfig(
   databaseUrl: string,
   signal?: AbortSignal,
+  recovery?: { tls?: TestDatabaseRecoveryTls },
 ): Promise<ClientConfig> {
   const url = new URL(databaseUrl)
+  if (recovery) {
+    const tls = recovery.tls
+    let ssl: ClientConfig["ssl"] = false
+    if (tls) {
+      const { createSecureContext, checkServerIdentity } = await import(
+        "node:tls"
+      )
+      const { X509Certificate, createPrivateKey } = await import("node:crypto")
+      try {
+        createSecureContext({
+          ca: tls.caPem,
+          cert: tls.certPem,
+          key: tls.keyPem,
+        })
+        const certificates = tls.caPem.match(
+          /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g,
+        )!
+        for (const certificate of certificates) new X509Certificate(certificate)
+        if (
+          tls.certPem &&
+          !new X509Certificate(tls.certPem).checkPrivateKey(
+            createPrivateKey(tls.keyPem!),
+          )
+        )
+          throw interruption()
+      } catch {
+        throw new TestDatabaseRecoveryError([
+          { code: "INVALID_INPUT", phase: "validate" },
+        ])
+      }
+      const host = url.hostname.replace(/^\[(.*)\]$/, "$1")
+      ssl = {
+        ca: tls.caPem,
+        cert: tls.certPem,
+        key: tls.keyPem,
+        rejectUnauthorized: true,
+        checkServerIdentity: (_hostname, certificate) =>
+          checkServerIdentity(host, certificate),
+      }
+    }
+    return explicitConfig(url, ssl)
+  }
   const { constants } = await import("node:fs")
   const { open, readFile } = await import("node:fs/promises")
   const readCertificate = async (key: string) => {
@@ -61,6 +105,10 @@ async function connectionConfig(
               : {}),
           }
         : false
+  return explicitConfig(url, ssl)
+}
+
+function explicitConfig(url: URL, ssl: ClientConfig["ssl"]): ClientConfig {
   const password = decodeURIComponent(url.password)
   return {
     host: url.hostname.replace(/^\[(.*)\]$/, "$1"),
@@ -107,11 +155,12 @@ export class TestDatabaseSession {
   static async create(
     databaseUrl: string,
     signal?: AbortSignal,
+    recovery?: { tls?: TestDatabaseRecoveryTls },
   ): Promise<TestDatabaseSession> {
     const [{ Client }, { Socket }, config] = await Promise.all([
       import("pg"),
       import("node:net"),
-      connectionConfig(databaseUrl, signal),
+      connectionConfig(databaseUrl, signal, recovery),
     ])
     signal?.throwIfAborted()
     const socket = new Socket()
