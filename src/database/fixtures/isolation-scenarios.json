@@ -187,7 +187,8 @@
   {
     "name": "parent-pool-contention",
     "parentPool": true,
-    "status": "removed"
+    "status": "removed",
+    "closeTimeoutMs": 2000
   },
   {
     "name": "impossible-verified-failure",

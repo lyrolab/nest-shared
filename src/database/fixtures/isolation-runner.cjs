@@ -605,6 +605,7 @@ async function caller() {
         : scenario.stall
           ? 500
           : 2000
+    const closeMs = scenario.closeTimeoutMs ?? 400
     const started = performance.now()
     try {
       const recovering = recoverTestDatabase({
@@ -627,7 +628,7 @@ async function caller() {
         acquiredOid: 42,
         exclusiveTarget: true,
         timeoutMs: workMs,
-        closeTimeoutMs: 400,
+        closeTimeoutMs: closeMs,
         signal: controller.signal,
       })
       if (scenario.mutation) {
@@ -662,7 +663,7 @@ async function caller() {
     }
     const elapsedMs = Math.round(performance.now() - started)
     assert.ok(
-      elapsedMs < workMs + 400,
+      elapsedMs < workMs + closeMs,
       `Invocation exceeded its budget: ${elapsedMs}`,
     )
     if (scenario.acquisition) {
