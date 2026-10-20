@@ -411,5 +411,46 @@
     "code": "DEADLINE_EXCEEDED",
     "outcome": "not-attempted",
     "forced": true
+  },
+  {
+    "name": "dns-caller-death-child-start",
+    "acquisition": "dns",
+    "callerDeath": "child-start",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-acquisition",
+    "acquisition": "dns",
+    "callerDeath": "acquisition",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-child-start",
+    "acquisition": "scram",
+    "callerDeath": "child-start",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-acquisition",
+    "acquisition": "scram",
+    "callerDeath": "acquisition",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "terminal-success-self-disposal",
+    "absent": true,
+    "terminalNative": true,
+    "selfDisposal": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "already-absent",
+    "forced": true
   }
 ]

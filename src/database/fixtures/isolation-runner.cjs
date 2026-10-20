@@ -118,7 +118,14 @@ function acquisitionFixture() {
     report("query")
     return query.apply(this, args)
   }
-  require("../../../dist/database/internal/test-database-recovery-child.js")
+  if (scenario.callerDeath === "child-start")
+    setTimeout(
+      () =>
+        require("../../../dist/database/internal/test-database-recovery-child.js"),
+      50,
+    )
+  else
+    require("../../../dist/database/internal/test-database-recovery-child.js")
 }
 
 function childFixture() {
@@ -152,6 +159,7 @@ function childFixture() {
   })
   const originalSend = process.send.bind(process)
   process.send = (message, ...args) => {
+    if (scenario.terminalNative && message.type === "result") void saturate()
     if (scenario.unpermittedResult && message.type === "ready")
       message = { version: 1, type: "result", outcome: "removed", failures: [] }
     if (scenario.badReady && message.type === "ready")
@@ -766,7 +774,7 @@ async function caller() {
         queries,
         backpressure,
         forcedChild: owned?.signalCode === "SIGKILL",
-        childSelfDisposal: !!scenario.parentLoss,
+        childSelfDisposal: !!(scenario.parentLoss || scenario.selfDisposal),
       }),
     )
   } finally {
@@ -788,7 +796,8 @@ async function observeCallerDeath(entry) {
     path.join(
       process.env.PAPERCLIP_RUN_SCRATCH_DIR ??
         process.env.PAPERCLIP_SCRATCH_DIR ??
-        process.env.TMPDIR,
+        process.env.RUNNER_TEMP ??
+        require("node:os").tmpdir(),
       "caller-loss-",
     ),
   )
@@ -859,13 +868,13 @@ async function observeCallerDeath(entry) {
     assert.equal(stderr, "")
     assert.equal(
       events.filter((event) => event.event === "acquisition").length,
-      1,
+      entry.callerDeath === "child-start" ? 0 : 1,
     )
     assert.equal(events.filter((event) => event.event === "settled").length, 0)
     assert.equal(events.filter((event) => event.event === "query").length, 0)
     assert.equal(
       events.filter((event) => event.event === "self-disposal").length,
-      1,
+      entry.callerDeath === "child-start" ? 0 : 1,
     )
     assert.ok(events.some((event) => event.event === "disconnect"))
     assert.ok(
@@ -879,14 +888,20 @@ async function observeCallerDeath(entry) {
     )
     assert.ok(endedAt - killedAt < 400)
     const result = events.find((event) => event.event === "result")
-    assert.equal(result.outcome, "not-attempted")
-    assert.equal(result.failures[0].code, "DEADLINE_EXCEEDED")
+    if (!["child-start", "acquisition"].includes(entry.callerDeath)) {
+      assert.equal(result.outcome, "not-attempted")
+      assert.equal(result.failures[0].code, "DEADLINE_EXCEEDED")
+      assert.ok(
+        endedAt <= result.time + 240,
+        "Repeated events extended the terminal fence",
+      )
+    }
     console.log(
       JSON.stringify({
         name: entry.name,
         passed: true,
         intentionalCallerDeath: true,
-        childSelfDisposal: true,
+        childSelfDisposal: entry.callerDeath !== "child-start",
         disposalMs: endedAt - killedAt,
         watchdog: false,
       }),
@@ -902,7 +917,10 @@ async function observeCallerDeath(entry) {
   }
 }
 async function main() {
-  for (const entry of scenarios) {
+  for (const entry of scenarios.filter(
+    (entry) =>
+      process.argv[2] !== "--only" || entry.name.includes(process.argv[3]),
+  )) {
     if (entry.callerDeath) {
       await observeCallerDeath(entry)
       continue

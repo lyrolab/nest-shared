@@ -1038,7 +1038,7 @@ describe("retained test database recovery public contract", () => {
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
       [join(__dirname, "fixtures/isolation-runner.cjs")],
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     )
     expect(stderr).toBe("")
     const reports = stdout
@@ -1068,5 +1068,5 @@ describe("retained test database recovery public contract", () => {
         true,
       )
     }
-  }, 125_000)
+  }, 185_000)
 })
