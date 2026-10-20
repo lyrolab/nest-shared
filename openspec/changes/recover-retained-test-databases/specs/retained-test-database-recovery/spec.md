@@ -208,9 +208,31 @@ Recovery SHALL own one private packaged Node child, launched with process.execPa
 
 #### Scenario: Parent channel disappears
 
-- **WHEN** the child observes parent disconnect
-- **THEN** it stops destructive work, disposes its owned session and uses its bounded owned-child self-termination fence if internal work cannot settle
+- **WHEN** the child observes parent disconnect before readiness, during acquisition or after result/finish
+- **THEN** it stops destructive work and interrupts its owned session even when terminal work is recorded
+- **AND** its dedicated emergency self-SIGKILL timer remains armed until actual exit, capped by the existing absolute close ceiling and reserved disposal interval
+- **AND** repeated disconnect/error/duplicate-terminal events can shorten that timer but cannot extend it
 - **AND** no background recovery or descendant survives, and remote lock release or DROP absence is never inferred from local termination
+
+#### Scenario: Terminal work retains emergency protection
+
+- **WHEN** real queued DNS or SCRAM remains pending and the owned caller dies after result-before-finish, at finish or at disconnect
+- **THEN** an independent owned supervisor observes child termination and IPC/stdio/fixture-peer closure within the original ceiling, without a fixture watchdog providing disposal or any late query
+- **AND** result, finish, successful Client end and socket close do not remove the child's emergency fence or parent-loss/error handling
+- **AND** intentional self-SIGKILL is disposal, not natural completion or fulfilled native promises
+
+#### Scenario: Clean terminal work exits naturally
+
+- **WHEN** no pending native work keeps a clean child alive after channel shutdown
+- **THEN** the child exits naturally while retaining its emergency timer through shutdown
+- **AND** only that dedicated timer may use Timeout.unref(); no process/channel/socket/parent-timer unref or beforeExit cancellation is allowed
+- **AND** synchronous exit cleanup may clear the timer but is not external disposal proof
+
+#### Scenario: Emergency disposal follows a terminal result
+
+- **WHEN** a live parent observes forced child disposal after receiving a terminal result
+- **THEN** it retains ordered primary failures followed by CLOSE_FAILED and joins exit/IPC/stdio and started sends before returning
+- **AND** forced disposal cannot become clean success, and possible DROP permission remains unknown absent trustworthy subsequent verification
 
 #### Scenario: Installed package and caller compatibility
 

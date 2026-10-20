@@ -1,3 +1,7 @@
+# Verification
+
+The [retained emergency fence proof](retained-fence.md) specifies the selected child-only timer exception and its exact prerequisite scope. Production still requires the correction in design decision 1d and tasks 3.3, 7.1 and 8.1; earlier green checks exclude the parent-loss-after-finish race.
+
 # Administration transport prerequisite
 
 The administration helper owns a Node socket supplied through pg's public Client

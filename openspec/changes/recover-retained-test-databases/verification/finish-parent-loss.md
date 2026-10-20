@@ -40,7 +40,7 @@ SCRAM survival for 1,002 ms after disconnect. Work is 500 ms and close is 400 ms
 These are failure observations, not passing public-boundary acceptance. Prior green CI
 and native/package evidence do not establish the missing parent-loss guarantee.
 
-## Design constraint to resolve
+## Historical design constraint
 
 The selected isolation direction forbids unref, detached cleanup, descendants, private
 pg access and caller exit requirements. It also requires natural clean-child completion.
@@ -60,7 +60,7 @@ Clearing the timer on result/finish reproduces the defect. Socket close and Clie
 cannot certify the hidden DNS/SCRAM work, as the queued-connection report establishes.
 The existing negative process.exit control also rules out synchronous exit as disposal.
 
-Founding Engineer must select the correction before implementation. One narrow candidate
+The selected correction is specified in design decision 1d and [its prerequisite proof](retained-fence.md). The statements below describe the constraint at the failing input, not current authorization. One narrow candidate
 is to permit only the dedicated child's emergency timer to be unreferenced, retain it
 through finish/disconnect, and clear it on actual process exit. Pending native work keeps
 the child alive for the self-SIGKILL fence; a clean child can exit naturally. This candidate
