@@ -297,5 +297,12 @@
     "cancelHandshake": true,
     "code": "CANCELLED",
     "outcome": "not-attempted"
+  },
+  {
+    "name": "late-disposal-confirmation",
+    "delayedExit": true,
+    "closeFailure": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed"
   }
 ]

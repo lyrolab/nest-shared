@@ -501,6 +501,10 @@ async function caller() {
       )
       const emit = owned.emit
       owned.emit = function (event, ...values) {
+        if (event === "exit" && scenario.delayedExit) {
+          setTimeout(() => emit.call(this, event, ...values), 600)
+          return true
+        }
         if (event === "message" && values[0]?.audit) {
           const kind = values[0].audit
           if (kind === "acquisition") {
