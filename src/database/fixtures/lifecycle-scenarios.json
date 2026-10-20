@@ -1,0 +1,22 @@
+[
+  {
+    "operation": "recreate",
+    "phase": "create"
+  },
+  {
+    "operation": "recreate",
+    "phase": "schema"
+  },
+  {
+    "operation": "clear",
+    "phase": "inspect"
+  },
+  {
+    "operation": "close",
+    "phase": "target-close"
+  },
+  {
+    "operation": "close",
+    "phase": "lease-close"
+  }
+]

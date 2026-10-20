@@ -1128,6 +1128,61 @@ describe("retained test database recovery public contract", () => {
     ).toBe(`DROP DATABASE "${original}"`)
   })
 
+  it.each(["connect", "inspect", "drop", "verify"])(
+    "stops late continuations after the work deadline during %s",
+    async (at) => {
+      jest.useFakeTimers()
+      try {
+        const { input, query, session, target, interrupt, close } =
+          mockSession()
+        let release: () => void = () => undefined
+        let reached: () => void = () => undefined
+        const barrier = new Promise<void>((resolve) => {
+          reached = resolve
+        })
+        const paused = () =>
+          new Promise<object[]>((resolve) => {
+            release = () => resolve([])
+            reached()
+          })
+        if (at === "connect") session.connect.mockImplementationOnce(paused)
+        else {
+          query
+            .mockReset()
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([binding])
+            .mockResolvedValueOnce([{ locked: true }])
+          if (at !== "inspect")
+            query
+              .mockResolvedValueOnce([target])
+              .mockResolvedValueOnce([target])
+          if (at === "verify") query.mockResolvedValueOnce([])
+          query.mockImplementationOnce(paused)
+        }
+        const result = recoverTestDatabase({ ...input, timeoutMs: 20 }).catch(
+          (error: unknown) => error,
+        )
+        await barrier
+        await jest.advanceTimersByTimeAsync(20)
+        release()
+        expect(await result).toMatchObject({
+          code: "DEADLINE_EXCEEDED",
+          outcome: ["drop", "verify"].includes(at)
+            ? "unknown"
+            : "not-attempted",
+        })
+        expect(interrupt).toHaveBeenCalled()
+        expect(close).toHaveBeenCalledTimes(1)
+        expect(
+          query.mock.calls.filter(([sql]) => sql.startsWith("DROP")),
+        ).toHaveLength(["drop", "verify"].includes(at) ? 1 : 0)
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
+    },
+  )
+
   it.each(["connect", "inspect", "drop"])(
     "stops dispatch after cancellation during %s",
     async (at) => {

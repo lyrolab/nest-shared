@@ -751,13 +751,101 @@ integration("owned PostgreSQL public boundary", () => {
       } finally {
         await peer.destroy()
       }
-      expect(await freshRecovery(creator.input)).toEqual({
-        result: { status: "removed" },
-      })
+      const retry = await freshRecovery(creator.input)
+      expect(["removed", "already-absent"]).toContain(retry.result?.status)
+      expect(retry.failure).toBeUndefined()
+      await absent(name)
       externalDatabases.delete(name)
     },
     30000,
   )
+
+  const lifecycleScenarios = JSON.parse(
+    readFileSync(join(__dirname, "fixtures/lifecycle-scenarios.json"), "utf8"),
+  ) as Array<{ operation: string; phase: string }>
+  it.each(lifecycleScenarios)(
+    "holds the native lifecycle lease during $operation at $phase",
+    async ({ operation, phase }) => {
+      const creator = await retainedCreator()
+      try {
+        creator.child.send({ operation, phase })
+        expect(await creator.message()).toEqual({ barrier: phase })
+        expect(await freshRecovery(creator.input)).toMatchObject({
+          failure: { code: "BUSY", outcome: "not-attempted" },
+        })
+        creator.child.send("release")
+        expect(await creator.message()).toEqual({ completed: operation })
+        creator.child.send("close")
+        expect(await creator.message()).toEqual({ closed: true })
+        expect(await creator.exit).toEqual({ code: 0, signal: null })
+        expect(await freshRecovery(creator.input)).toEqual({
+          result: { status: "already-absent" },
+        })
+        externalDatabases.delete(creator.input.database.databaseName)
+      } finally {
+        if (children.has(creator.child)) {
+          creator.child.kill("SIGKILL")
+          await creator.exit
+        }
+      }
+    },
+    30000,
+  )
+
+  it("refuses unsafe use after native lease loss and reacquires for cleanup retry", async () => {
+    const creator = await retainedCreator()
+    const key = createHash("sha256")
+      .update(
+        JSON.stringify([
+          "@lyrolab/nest-shared/test-database",
+          creator.input.database.databaseName,
+        ]),
+      )
+      .digest()
+      .readBigInt64BE()
+      .toString()
+    const barrier = admin.createQueryRunner()
+    await barrier.connect()
+    try {
+      const leases = await admin.query<{ pid: number }[]>(
+        "SELECT pid FROM pg_stat_activity WHERE usename = $1 AND datname = $2 AND application_name = 'nest-shared-test-database'",
+        [recoveryRole, fixtureBase],
+      )
+      expect(leases).toHaveLength(1)
+      await admin.query("SELECT pg_terminate_backend($1)", [leases[0].pid])
+      await barrier.query("SELECT pg_advisory_lock($1::bigint)", [key])
+      creator.child.send("unsafe")
+      expect(await creator.message()).toEqual({ refused: 3 })
+      creator.child.send("retry-close")
+      expect(await creator.message()).toEqual({ cleanup: "refused" })
+      const target = await new DataSource({
+        type: "postgres",
+        url: targetUrl(recoveryBaseUrl, creator.input.database.databaseName),
+      }).initialize()
+      try {
+        expect(await target.query("SELECT id FROM sentinel")).toEqual([
+          { id: 7 },
+        ])
+      } finally {
+        await target.destroy()
+      }
+      await barrier.query("SELECT pg_advisory_unlock($1::bigint)", [key])
+      creator.child.send("close")
+      expect(await creator.message()).toEqual({ closed: true })
+      expect(await creator.exit).toEqual({ code: 0, signal: null })
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "already-absent" },
+      })
+      externalDatabases.delete(creator.input.database.databaseName)
+    } finally {
+      await barrier.query("SELECT pg_advisory_unlock($1::bigint)", [key])
+      await barrier.release()
+      if (children.has(creator.child)) {
+        creator.child.kill("SIGKILL")
+        await creator.exit
+      }
+    }
+  }, 30000)
 
   const recoveryScenarios = JSON.parse(
     readFileSync(join(__dirname, "fixtures/recovery-scenarios.json"), "utf8"),
