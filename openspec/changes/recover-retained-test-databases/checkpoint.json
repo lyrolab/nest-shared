@@ -1,42 +1,36 @@
 {
   "stage": "apply",
-  "remaining": "WIP: complete the five new native driver-fault/lease-close retry tests and final full tests/build/lint on the owned PostgreSQL 16 fixture. Native focused run passes 12/12 selected cases for quoted/UTF-8 recovery, concurrent recovery, held lock, connected-target deadlines/cancellation, CREATE/schema/clear/target-close/lease-close barriers and lease-loss/reacquisition retry. Unit runner passes 100/100, including ambiguous binding/catalog and four late-continuation deadline phases. Final verification must rerun all cases after the newest fixture fault controls. Update remaining task checkboxes only after that verification, update PR apply marker and ready state, then hand this issue to Simplifier. Same issue/branch/PR/owner; no release claim.",
+  "remaining": "Apply complete: 17/17 tasks. Next owner: Simplifier, on this same issue, branch and PR. Preserve exact identity/direct-owner validation, lifetime lease and retry state, conservative outcomes, and confirmed disposal even when close reports failure. Reviewer returns the open issue to Founding Engineer after merge for actual release verification; no released version or consumer readiness is claimed. No apply continuation is needed.",
   "verification": [
     {
-      "command": "DATABASE_URL=<owned disposable local PostgreSQL 16> TMPDIR=\"$PAPERCLIP_RUN_SCRATCH_DIR\" RUNNER_TEMP=\"$PAPERCLIP_RUN_SCRATCH_DIR\" npm test -- --runInBand src/database",
-      "result": "Pass: 112/112, 3 suites, no skips, 260.449 seconds. 29 native cases include migrations/Nest/factory/worker/natural failure regressions and 11 new public-package recovery cases. Real creators persist mode-0600 original info/OID; retained cases terminate the creator before a distinct recovery process. Recovery uses a harness-owned non-superuser direct owner. Removed/idempotent retry, active lease refusal, live sibling sentinel, no-OID/malformed/name/base/role/owner/OID mismatch, rename, replacement and connected-target refusal pass. All recovery children exit naturally. 80 unit cases include 13 implemented-helper plaintext/TLS transport scenarios and declaration smoke; 3 CLI cases pass. No native lifecycle-race/lease-loss/deadline acceptance is claimed.",
-      "testedInput": "Production source, native scenario logic and fixtures at 9871e243674c7fd9536948b2cebc2de76fbedf06; compiled public package built at that commit. Unit suite loaded the current public-types fixture and smoke after native completion. Added CI absence guard and defensive native failure-path cleanup after the native suite loaded: that cleanup change needs next native verification. Current database/manifests/config/workflow input SHA-256 8959837246b0a84ba5e16c27e22d62d7316842ab429f879982e38b43d52734cc",
-      "invalidatedBy": "Changes to database code, fixture scenarios/cleanup, dependencies, compiler/Jest configuration, runtime or server. Native guard/defensive cleanup changes are explicitly outside the reused native input; verify them with remaining native work."
+      "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand",
+      "result": "Pass: 398/398 tests, 34/34 suites, no skips; 372.563 seconds. Database coverage: 46 native public-boundary cases, 100 unit cases and 3 CLI cases. Distinct creator/recovery processes, restricted original acquisition records, terminated creators, exact removal/idempotence, refusal and sibling sentinels, quoted/UTF-8 identities, concurrency, five lifecycle barriers, lease loss and retry, native connected-target deadline/cancellation, natural exits and native postconditions under injected driver faults pass. The unit runner includes 13 implemented-helper plaintext/TLS transport cases, four late-continuation deadline phases, safe failure ordering, ambiguous catalog responses and public declaration smoke. Production/setup/reset/migration, auth, Keycloak, AI and other repository regressions pass. Native and injected transport evidence are distinct.",
+      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d; built public package from the same source. Node 24.13.0, pg 8.23.1, TypeScript 5.8.3, owned PostgreSQL 16. SHA-256 over sorted database files/manifests/compiler configurations/test workflow with filename/content NUL framing: 0b2537acf4ba6a1afcfd87f941a2ecac97cdc237efbb119f83b658f244dedf60. Subsequent edits are task/checkpoint metadata only.",
+      "invalidatedBy": "Production source, test/fixture data or cleanup, dependencies, runtime/server, compiler/Jest configuration or native prerequisites change."
     },
     {
       "command": "npm run build",
-      "result": "Pass. Public database JS/declarations built, fixtures excluded.",
-      "testedInput": "9871e243674c7fd9536948b2cebc2de76fbedf06; no production source, package dependency or build configuration change since.",
-      "invalidatedBy": "Production source, dependencies or compiler/build configuration changes."
+      "result": "Pass: built public JS/declarations; database test fixtures excluded from dist.",
+      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d production source, manifests and compiler configuration; no production edit after build.",
+      "invalidatedBy": "Production source, dependencies or build/compiler configuration change."
     },
     {
-      "command": "node_modules/.bin/tsc -p src/database/fixtures/public-types/tsconfig.json; node_modules/.bin/eslint src/database/fixtures/public-types/recovery.ts src/database/shared-database.module.spec.ts src/database/shared-database.integration.spec.ts",
-      "result": "Pass. Node16 consumer smoke resolves the built package export through its own tsconfig; lint passes without suppressions.",
-      "testedInput": "Current public-types consumer fixture and checked specs; production declarations built at 9871e24. Native spec defensive cleanup only changed later; final lint must include it.",
-      "invalidatedBy": "Checked source/configuration/declarations or TypeScript/lint dependency changes."
+      "command": "npm run lint; node_modules/.bin/eslint 'src/**/*.ts'",
+      "result": "Pass: full lint and final whole-source read-only ESLint. No suppressions or formatter changes required.",
+      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d source and current lint configuration.",
+      "invalidatedBy": "Source, lint configuration or lint dependency changes."
     },
     {
-      "command": "CI=true with DATABASE_URL removed in a child environment: Jest native integration runner; build fixture exclusion assertion",
-      "result": "Expected failure is confirmed for the exact missing-prerequisite message, preventing CI skips; dist/database/fixtures is absent.",
-      "testedInput": "Current CI prerequisite guard, current compiled build at 9871e24.",
-      "invalidatedBy": "Guard, test discovery, build exclusion or CI workflow changes."
+      "command": "openspec validate recover-retained-test-databases --strict --no-interactive; node_modules/.bin/prettier --check openspec/changes/recover-retained-test-databases src/database package.json package-lock.json .github/workflows/test.yml; git diff --check",
+      "result": "Pass. Final task/checkpoint metadata is formatted and validated separately before handoff.",
+      "testedInput": "c3aeca85327876f8d69611a09fd24947d9eb710d implementation, proposal and configuration; final metadata-only checks follow.",
+      "invalidatedBy": "Checked files, formatter/OpenSpec dependencies or configuration change."
     },
     {
-      "command": "npm test -- --runInBand src/database/shared-database.module.spec.ts",
-      "result": "Pass: 100/100 including 13 implemented-helper transport cases, public declarations, 16 catalog/failure cases and four deadline continuation cases.",
-      "testedInput": "3801edd unit runner and unchanged compiled production package from the prior checkpoint.",
-      "invalidatedBy": "Unit runner, production source, fixture, dependency, runtime or compiler/Jest configuration changes."
-    },
-    {
-      "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand src/database/shared-database.integration.spec.ts --testNamePattern \"original identities|concurrent fresh|real held|real connected|native lifecycle|native lease loss\"",
-      "result": "Pass: 12 selected cases; 29 intentionally unselected existing cases. Duration 44.272s. Native contention at five lifecycle phases, real lease loss and explicit retry, quoted/UTF-8 original identity, concurrency and post-dispatch interruption pass. Retry after uncertain cancellation may confirm absence rather than perform DROP.",
-      "testedInput": "Native runner loaded at 3801edd. Recovery fixture later received additive disabled-by-default fault controls while tests ran; final full verification remains required for that exact fixture.",
-      "invalidatedBy": "Native runner, fixture, production source, dependencies/runtime/server or configuration changes. Does not verify the new fault-control cases."
+      "command": "git diff origin/main --name-only; compare createProductionConfiguration with origin/main; fixture-identity disclosure scan",
+      "result": "Production configuration method matches main exactly. Auth/AI/release workflow files are unchanged. Scan over changed branch files, commit messages and PR text finds no acquired fixture identity disclosures; final scan follows metadata and PR updates.",
+      "testedInput": "origin/main 6df1f037bab65ee6607985bd49b32df8da49f95d through c3aeca85327876f8d69611a09fd24947d9eb710d; native journals remain restricted scratch.",
+      "invalidatedBy": "Relevant source/diff/commit/PR text changes or new disclosure input requires rechecking."
     }
   ]
 }
