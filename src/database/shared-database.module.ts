@@ -6,11 +6,15 @@ import {
 } from "@nestjs/common"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { TypeOrmModule, TypeOrmModuleOptions } from "@nestjs/typeorm"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { join } from "path"
 import { findMainPath } from "./helpers/find-main-path"
 import { DataSource, DataSourceOptions } from "typeorm"
+import {
+  quoteIdentifier,
+  testDatabaseName,
+} from "./helpers/test-database-identity"
 
 const ENTITIES_PATH = "**/*.entity.{ts,js}"
 const MIGRATIONS_PATH = "dist/migrations/**/*.{ts,js}"
@@ -43,12 +47,6 @@ export interface ForTestOptions {
 
 export function createTestDatabaseInvocation(): TestDatabaseInvocation {
   return Object.freeze({ namespace: `${process.pid}-${randomUUID()}` })
-}
-
-function quoteIdentifier(identifier: string): string {
-  if (!identifier || identifier.includes("\0"))
-    throw new Error("Invalid database identifier")
-  return `"${identifier.replaceAll('"', '""')}"`
 }
 
 function throwErrors(errors: unknown[], message: string): void {
@@ -165,24 +163,7 @@ export class SharedDatabaseModule {
     quoteIdentifier(baseName)
     const identity = this.identity!
     const namespace = this.invocation!.namespace
-    const digest = createHash("sha256")
-      .update(
-        JSON.stringify([
-          baseName,
-          namespace,
-          identity.processId,
-          identity.workerId,
-        ]),
-      )
-      .digest("hex")
-      .slice(0, 32)
-    const suffix = `_test_${digest}`
-    let prefix = ""
-    for (const character of baseName) {
-      if (Buffer.byteLength(prefix + character + suffix) > 63) break
-      prefix += character
-    }
-    const databaseName = prefix + suffix
+    const databaseName = testDatabaseName(baseName, { namespace, ...identity })
     url.pathname = `/${encodeURIComponent(databaseName)}`
     const info = Object.freeze({ namespace, ...identity, databaseName })
     this.configuration = { baseUrl, url: url.toString(), info }

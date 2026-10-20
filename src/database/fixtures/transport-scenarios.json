@@ -1,0 +1,80 @@
+[
+  {
+    "name": "plain-idle",
+    "tls": false,
+    "phase": "idle",
+    "forced": true
+  },
+  {
+    "name": "plain-active",
+    "tls": false,
+    "phase": "active"
+  },
+  {
+    "name": "plain-connect-abort",
+    "tls": false,
+    "phase": "startup",
+    "interrupt": true
+  },
+  {
+    "name": "tls-negotiation-abort",
+    "tls": true,
+    "phase": "handshake",
+    "interrupt": true
+  },
+  {
+    "name": "tls-connect-abort",
+    "tls": true,
+    "phase": "startup",
+    "interrupt": true
+  },
+  {
+    "name": "tls-idle",
+    "tls": true,
+    "phase": "idle",
+    "forced": true
+  },
+  {
+    "name": "tls-active",
+    "tls": true,
+    "phase": "active"
+  },
+  {
+    "name": "tls-untrusted",
+    "tls": true,
+    "phase": "certificate",
+    "untrusted": true
+  },
+  {
+    "name": "tls-wrong-dns",
+    "tls": true,
+    "phase": "certificate",
+    "mismatch": true
+  },
+  {
+    "name": "tls-wrong-ip",
+    "tls": true,
+    "phase": "certificate",
+    "mismatch": true,
+    "ip": true
+  },
+  {
+    "name": "plain-active-abort",
+    "tls": false,
+    "phase": "active",
+    "interrupt": true
+  },
+  {
+    "name": "tls-active-abort",
+    "tls": true,
+    "phase": "active",
+    "interrupt": true
+  },
+  {
+    "name": "tls-valid-ip",
+    "tls": true,
+    "phase": "idle",
+    "ip": true,
+    "forced": true
+  }
+]

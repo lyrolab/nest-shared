@@ -1,0 +1,18 @@
+{
+  "stage": "apply",
+  "remaining": "WIP: run the implemented helper transport regressions after build; integrate lifetime advisory lease and retry state into SharedDatabaseModule; finish native public-package/two-process coverage, declaration smoke, README, CI and final checks. No native recovery acceptance or completed apply stage is claimed.",
+  "verification": [
+    {
+      "command": "npm test -- --runInBand src/database/recover-test-database.spec.ts src/database/shared-database.module.spec.ts",
+      "result": "2 suites, 64 tests pass. Injected API boundaries and existing module tests only; no native PostgreSQL execution.",
+      "testedInput": "Recovery API, input capture, shared identity and owned-session source in this checkpoint; the transport runner is not yet executed.",
+      "invalidatedBy": "Changes to database implementation, dependency versions or these specs."
+    },
+    {
+      "command": "node_modules/.bin/eslint src/database/helpers/test-database-{identity,recovery-input,session}.ts src/database/recover-test-database.ts src/database/recover-test-database.spec.ts src/database/test-database-recovery-error.ts",
+      "result": "Pass, no warnings or errors.",
+      "testedInput": "The six named TypeScript files before the transport fixture addition.",
+      "invalidatedBy": "Edits to the checked files, TypeScript dependencies or lint configuration."
+    }
+  ]
+}
