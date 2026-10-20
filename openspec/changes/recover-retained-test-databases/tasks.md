@@ -14,7 +14,7 @@
 
 - [x] 3.1 Implement independent actual base/session/current-role validation and exact target/name/OID/direct-owner/template checks under the shared lock. Verify wrong base/role/owner/OID, reserved/base/current names, renamed OID, same-name replacement and ambiguous catalog results refuse without deleting sentinel data.
 - [x] 3.2 Implement validated already-absent and ordinary exact DROP followed by verified absence. Verify no IF EXISTS/FORCE, peer termination, role changes, prefix sweep, setup, migration or data work; a connected peer refuses and an explicit later retry succeeds.
-- [x] 3.3 Implement monotonic work/close budgets and cancellation before each dispatch. Verify preconnect/inspection/pre-DROP cancellation cannot dispatch late DROP, connect/query/drop/verify settle within work bounds, and close reserves half its budget for forced disposal/confirmation. Test immediate owned-socket destruction with safe error during connect on abort/deadline, observed local close/public Client end, settled operations, cleared timers/listeners, and natural exit without detached cleanup.
+- [ ] 3.3 Implement monotonic work/close budgets and cancellation before each dispatch. Verify preconnect/inspection/pre-DROP cancellation cannot dispatch late DROP, connect/query/drop/verify settle within work bounds, and close reserves half its budget for forced disposal/confirmation. Test immediate owned-socket destruction with safe error during connect on abort/deadline, observed local close/public Client end, settled operations, cleared timers/listeners, and natural exit without detached cleanup.
 - [x] 3.4 Preserve conservative post-dispatch uncertainty and ordered safe primary/close failures. Inject lost DROP acknowledgement, failed verification and close errors/timeouts at the public driver boundary; verify forced fallback after graceful failure/expiry always retains CLOSE_FAILED alongside the primary failure and conservative DROP outcome. Confirmed absence plus close failure still rejects; later explicit retry can confirm absence. Serialized errors must contain no private connection/identity/server values. Local close cannot authorize a lock bypass while the server still holds the lease.
 
 ## 4. Native public-package coverage
@@ -35,7 +35,7 @@ Release verification belongs to Founding Engineer after review: verify actual re
 ## 6. Review fixes
 
 - [x] 6.1 Contextually type the pg configuration and verify npm ci plus build with the actual locked pg types.
-- [x] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
+- [ ] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
 - [x] 6.3 Run the affected public API, transport and native checks and update the checkpoint with exact inputs.
 
 Handoff requires passing CI on the final head. Record that result on the issue after committing the verification metadata.
