@@ -43,7 +43,6 @@ describe("test database public API", () => {
     })
   })
   afterEach(async () => {
-    jest.restoreAllMocks()
     jest.spyOn(DataSource.prototype, "destroy").mockImplementation(function (
       this: DataSource,
     ) {
@@ -56,7 +55,9 @@ describe("test database public API", () => {
       connected(this, true)
       return Promise.resolve(this)
     })
-    jest.spyOn(DataSource.prototype, "query").mockResolvedValue([{ oid: 42 }])
+    // Preserve the fixture catalog through retry cleanup.
+    const query = jest.mocked(DataSource.prototype.query)
+    if (query.mock) query.mockImplementation(catalogQuery)
     await Database.resetTestDatabase()
     jest.restoreAllMocks()
   })
@@ -178,6 +179,47 @@ describe("test database public API", () => {
     expect(initialize).not.toHaveBeenCalled()
   })
 
+  let present = false
+  function catalogQuery(
+    sql: string,
+    parameters?: unknown[],
+  ): Promise<object[]> {
+    if (sql.startsWith("CREATE DATABASE")) {
+      present = true
+      return Promise.resolve([])
+    }
+    if (sql.startsWith("DROP DATABASE")) {
+      present = false
+      return Promise.resolve([])
+    }
+    if (sql.includes("pg_try_advisory_lock"))
+      return Promise.resolve([{ locked: true }])
+    if (sql.includes("session_user"))
+      return Promise.resolve([
+        {
+          name: decodeURIComponent(new URL(currentBase).pathname.slice(1)),
+          session: "local",
+          current: "local",
+          template: false,
+        },
+      ])
+    if (sql.includes("current_database"))
+      return Promise.resolve([
+        {
+          name: Database.getTestDatabaseInfo(
+            new ConfigService({ DATABASE_URL: currentBase }),
+          ).databaseName,
+        },
+      ])
+    if (sql.includes("OR oid"))
+      return Promise.resolve(
+        present
+          ? [{ oid: 42, name: parameters![0], owner: true, template: false }]
+          : [],
+      )
+    return Promise.resolve([{ oid: 42 }])
+  }
+  let currentBase = baseUrl
   function mockBoundary() {
     jest.spyOn(DataSource.prototype, "synchronize").mockResolvedValue()
     jest.spyOn(DataSource.prototype, "runMigrations").mockResolvedValue([])
@@ -195,16 +237,36 @@ describe("test database public API", () => {
         connected(this, false)
         return Promise.resolve()
       })
+    present = false
     const query = jest
       .spyOn(DataSource.prototype, "query")
-      .mockImplementation((sql: string) => {
-        if (sql.includes("current_database"))
-          return Promise.resolve([
-            { name: Database.getTestDatabaseInfo(config()).databaseName },
-          ])
-        return Promise.resolve([{ oid: 42 }])
+      .mockImplementation(catalogQuery)
+    const admin = new DataSource({ type: "postgres", url: baseUrl })
+    const connect = jest.fn().mockResolvedValue(undefined)
+    const close = jest.fn().mockResolvedValue(undefined)
+    const session = {
+      healthy: true,
+      disposed: true,
+      connect,
+      close,
+      query: (sql: string, values: unknown[]) => admin.query(sql, values),
+    }
+    const create = jest
+      .spyOn(TestDatabaseSession, "create")
+      .mockImplementation((url) => {
+        currentBase = url
+        return Promise.resolve(session as unknown as TestDatabaseSession)
       })
-    return { sources, initialize, destroy, query }
+    return {
+      sources,
+      initialize,
+      destroy,
+      query,
+      connect,
+      close,
+      create,
+      session,
+    }
   }
 
   it("shares setup, quotes DDL, closes pools and supports repeat setup and reset", async () => {
@@ -220,8 +282,10 @@ describe("test database public API", () => {
         new URL((factory.options as { url: string }).url).pathname.slice(1),
       ),
     ).toBe(Database.getTestDatabaseInfo(config('base"name')).databaseName)
-    expect(query.mock.calls[0][0]).toMatch(/^CREATE DATABASE "base""name_test_/)
-    expect(sources).toHaveLength(2)
+    expect(
+      query.mock.calls.find(([sql]) => String(sql).startsWith("CREATE"))![0],
+    ).toMatch(/^CREATE DATABASE "base""name_test_/)
+    expect(sources).toHaveLength(1)
     await Database.closeTestConnection()
     expect(sources.every((source) => !source.isInitialized)).toBe(true)
     expect(
@@ -311,8 +375,8 @@ describe("test database public API", () => {
   })
 
   it("reports an admin initialization failure without attempting CREATE", async () => {
-    const { initialize, query, sources } = mockBoundary()
-    initialize.mockRejectedValueOnce(new Error("admin initialize failed"))
+    const { connect, query, sources } = mockBoundary()
+    connect.mockRejectedValueOnce(new Error("admin initialize failed"))
     Database.forTest({ entities: [] })
     await expect(Database.setupTestDatabase(config())).rejects.toThrow(
       "admin initialize failed",
@@ -323,20 +387,31 @@ describe("test database public API", () => {
 
   it("preserves a collision without adopting or dropping it", async () => {
     const { query, sources } = mockBoundary()
-    query.mockRejectedValueOnce(new Error("database already exists"))
+    const original = catalogQuery
+    query.mockImplementation((sql, values) => {
+      if (sql.startsWith("CREATE"))
+        return Promise.reject(new Error("database already exists"))
+      return original(sql, values)
+    })
     Database.forTest({ entities: [] })
     await expect(Database.setupTestDatabase(config())).rejects.toThrow(
       "already exists",
     )
     await Database.closeTestConnection()
-    expect(query).toHaveBeenCalledTimes(1)
+    expect(
+      query.mock.calls.filter(([sql]) => String(sql).startsWith("DROP")),
+    ).toHaveLength(0)
     expect(sources.every((source) => !source.isInitialized)).toBe(true)
   })
 
   it("preserves administration and destroy failures and retries cleanup", async () => {
-    const { query, destroy } = mockBoundary()
-    query.mockRejectedValueOnce(new Error("create failed"))
-    destroy.mockRejectedValueOnce(new Error("admin destroy failed"))
+    const { query, close } = mockBoundary()
+    query.mockImplementation((sql, values) => {
+      if (sql.startsWith("CREATE"))
+        return Promise.reject(new Error("create failed"))
+      return catalogQuery(sql, values)
+    })
+    close.mockRejectedValueOnce(new Error("admin destroy failed"))
     Database.forTest({ entities: [] })
     await expect(Database.setupTestDatabase(config())).rejects.toBeInstanceOf(
       AggregateError,
@@ -345,22 +420,22 @@ describe("test database public API", () => {
   })
 
   it("rolls back migration initialization failures and rejects overlapping lifecycle calls", async () => {
-    const { initialize, query } = mockBoundary()
+    const { connect, query } = mockBoundary()
     let release: () => void = () => undefined
-    initialize.mockImplementationOnce(function (this: DataSource) {
-      return new Promise<DataSource>((resolve) => {
-        release = () => {
-          connected(this, true)
-          resolve(this)
-        }
-      })
-    })
+    connect.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
     Database.forTest({ entities: [] })
     const setup = Database.setupTestDatabase(config())
     await expect(Database.closeTestConnection()).rejects.toThrow("busy")
     await expect(Database.resetTestDatabase()).rejects.toThrow("busy")
     await expect(Database.clearTestDatabase()).rejects.toThrow("busy")
-    initialize.mockRejectedValueOnce(new Error("migration failed"))
+    jest
+      .spyOn(DataSource.prototype, "synchronize")
+      .mockRejectedValueOnce(new Error("migration failed"))
     release()
     await expect(setup).rejects.toThrow("migration failed")
     expect(
@@ -418,6 +493,138 @@ describe("test database public API", () => {
       Database.setupTestDatabase(new ConfigService({ DATABASE_URL: baseUrl })),
     ).rejects.toThrow("cleanup must succeed")
     await Database.resetTestDatabase()
+  })
+  it("refuses a cooperating lease holder before CREATE and closes the refused session", async () => {
+    const { query, close } = mockBoundary()
+    query.mockImplementation((sql, values) =>
+      sql.includes("pg_try_advisory_lock")
+        ? Promise.resolve([{ locked: false }])
+        : catalogQuery(sql, values),
+    )
+    Database.forTest({ entities: [] })
+    await expect(Database.setupTestDatabase(config())).rejects.toMatchObject({
+      code: "BUSY",
+    })
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).startsWith("CREATE")),
+    ).toBe(false)
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it("retains the lease through active use, clear and a failed target close", async () => {
+    const { close, destroy, create, query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    await Database.clearTestDatabase()
+    expect(close).not.toHaveBeenCalled()
+    destroy.mockRejectedValueOnce(new Error("retained target owner"))
+    await expect(Database.closeTestConnection()).rejects.toThrow(
+      "retained target",
+    )
+    expect(close).not.toHaveBeenCalled()
+    await Database.closeTestConnection()
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(
+      query.mock.calls.filter(([sql]) =>
+        String(sql).includes("pg_try_advisory_lock"),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it("refuses use after lease loss and reacquires before owned DROP", async () => {
+    const { session, create, query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    session.healthy = false
+    expect(() => Database.getTestDataSource()).toThrow("not initialized")
+    expect(() => Database.forTest({ entities: [] })).toThrow(
+      "cleanup must succeed",
+    )
+    await expect(Database.setupTestDatabase(config())).rejects.toThrow(
+      "cleanup must succeed",
+    )
+    await expect(Database.clearTestDatabase()).rejects.toThrow(
+      "not initialized",
+    )
+    create.mockImplementationOnce(() =>
+      Promise.resolve({
+        ...session,
+        healthy: true,
+      } as unknown as TestDatabaseSession),
+    )
+    await Database.resetTestDatabase()
+    const sql = query.mock.calls.map(([text]) => String(text))
+    expect(
+      sql.filter((text) => text.includes("pg_try_advisory_lock")),
+    ).toHaveLength(2)
+    expect(
+      sql.findLastIndex((text) => text.includes("pg_try_advisory_lock")),
+    ).toBeLessThan(sql.findIndex((text) => text.startsWith("DROP")))
+  })
+
+  it("cannot bypass a server-held lease after local session loss", async () => {
+    const { session, create, query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    session.healthy = false
+    create.mockImplementation(() =>
+      Promise.resolve({
+        ...session,
+        healthy: true,
+      } as unknown as TestDatabaseSession),
+    )
+    query.mockImplementation((sql, values) =>
+      sql.includes("pg_try_advisory_lock")
+        ? Promise.resolve([{ locked: false }])
+        : catalogQuery(sql, values),
+    )
+    for (let attempt = 0; attempt < 2; attempt++)
+      await expect(Database.closeTestConnection()).rejects.toMatchObject({
+        code: "BUSY",
+      })
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
+    ).toBe(false)
+  })
+
+  it("retains an uncertain DROP and verifies exact absence on explicit retry", async () => {
+    const { query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    query.mockImplementation((sql, values) => {
+      const result = catalogQuery(sql, values)
+      if (sql.startsWith("DROP"))
+        return Promise.reject(new Error("lost acknowledgement"))
+      return result
+    })
+    await expect(Database.closeTestConnection()).rejects.toThrow(
+      "lost acknowledgement",
+    )
+    await Database.closeTestConnection()
+    expect(
+      query.mock.calls.filter(([sql]) => String(sql).startsWith("DROP")),
+    ).toHaveLength(1)
+  })
+
+  it("keeps cleanup required after DROP succeeds but lease close fails", async () => {
+    const { close, query } = mockBoundary()
+    Database.forTest({ entities: [] })
+    await Database.setupTestDatabase(config())
+    close.mockRejectedValueOnce(
+      new TestDatabaseRecoveryError([{ code: "CLOSE_FAILED", phase: "close" }]),
+    )
+    await expect(Database.closeTestConnection()).rejects.toMatchObject({
+      code: "CLOSE_FAILED",
+    })
+    await expect(Database.setupTestDatabase(config())).rejects.toThrow(
+      "cleanup must succeed",
+    )
+    await Database.closeTestConnection()
+    expect(
+      query.mock.calls.filter(([sql]) => String(sql).startsWith("DROP")),
+    ).toHaveLength(1)
+    await Database.setupTestDatabase(config())
   })
 })
 

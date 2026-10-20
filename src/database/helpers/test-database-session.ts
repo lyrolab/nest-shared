@@ -65,6 +65,7 @@ export class TestDatabaseSession {
   private stopping = false
   private lost = false
   private closing?: Promise<void>
+  private confirmed = false
 
   private readonly onError = () => {
     this.lost = true
@@ -101,6 +102,10 @@ export class TestDatabaseSession {
       stream: () => socket,
     }
     return new TestDatabaseSession(new Client(clientConfig), socket)
+  }
+
+  get disposed(): boolean {
+    return this.confirmed
   }
 
   get healthy(): boolean {
@@ -184,6 +189,7 @@ export class TestDatabaseSession {
         }
       }
       await within(confirm(), deadline - performance.now())
+      this.confirmed = true
     } catch {
       failed = true
       this.socket.destroy(interruption())
