@@ -117,6 +117,7 @@ async function caller() {
     assert.equal(options.shell, false)
     assert.equal(options.detached, false)
     assert.equal(args.length, 1)
+    if (scenario.deniedLaunch) throw new Error("Fixture launch denied")
     owned = spawn(
       executable,
       scenario.missingEntry
@@ -188,7 +189,7 @@ async function caller() {
       /fixture|base_test_|password|certificate|Error:/,
     )
   }
-  if (scenario.preabort) assert.equal(owned, undefined)
+  if (scenario.preabort || scenario.deniedLaunch) assert.equal(owned, undefined)
   else {
     assert.equal(exited, true)
     assert.equal(disconnected, true)

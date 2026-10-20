@@ -112,9 +112,11 @@ An interrupted process can leave its database behind. Use exact recovery below a
 
 ## Recover an exact retained database
 
-`recoverTestDatabase` works in a fresh ordinary Node, Jest or Vitest process. Install `pg ^8.23.1` when using test administration. The administration helper supports Node TCP and pg's PostgreSQL SSLRequest negotiation, with pg TLS and certificate/hostname checks intact. Unix sockets, custom streams, direct TLS negotiation and connection-string binding overrides are refused. Production `forRoot` configuration is independent of these administration bounds.
+`recoverTestDatabase` works in a fresh ordinary Node, Jest or Vitest process on Linux. The caller must be allowed to launch and terminate one owned Node child; the installed package includes its private entry. Recovery has no in-process fallback. Install `pg ^8.23.1` when using test administration. The administration helper supports Node TCP and pg's PostgreSQL SSLRequest negotiation, with pg TLS and certificate/hostname checks intact. Unix sockets, custom streams, direct TLS negotiation and connection-string binding overrides are refused. Production `forRoot` configuration is independent of these administration bounds.
 
-TLS certificate paths (`sslrootcert`, `sslcert`, `sslkey`) must refer to regular files. Configuration reads share the recovery work deadline and cancellation signal; each opened file closes before loading returns. FIFOs, devices and directories are refused before connecting.
+Recovery accepts in-memory TLS PEM strings through `base.tls`: required `caPem` and optional paired `certPem`/`keyPem`. Load and validate their source configuration before invocation; preparation has its own caller-owned lifecycle and is outside `timeoutMs`. Every URL certificate path (`sslrootcert`, `sslcert`, `sslkey`) is refused, including empty or duplicated parameters and paths combined with `sslmode=disable` or PEM material. Normal `forRoot`/`forTest`/setup/reset TLS URL behavior is independent of this recovery-only requirement.
+
+With no `base.tls`, omit `sslmode` or use `disable` for plain TCP. With PEM material, omit `sslmode` or use `require`, `verify-ca` or `verify-full`; all three retain full certificate and DNS/IP identity checks. `disable` conflicts with PEM material. Unknown or duplicated URL options, broad TLS options, callbacks, buffers and arrays are refused. PEM strings must be nonempty, valid Unicode and NUL-free, at most 1 MiB each. Client certificate/key must match and cannot require a passphrase. TLS failures never trigger a plaintext retry.
 
 After successful setup, save the original info and a positively observed OID in a restricted record:
 
@@ -163,19 +165,54 @@ const result = await recoverTestDatabase({
   closeTimeoutMs: 5_000,
   signal: controller.signal,
 })
-// Both statuses confirm exact absence and successful local connection closure.
+// Both statuses confirm exact absence and successful child disposal.
 if (result.status === "removed" || result.status === "already-absent") {
   // Durably record success before deleting the retained journal.
 }
 ```
 
+For an existing TLS URL with certificate paths, independently validate its endpoint, role and file sources first. Prepare the material, then deliberately construct an equivalent explicit base URL. Keep credentials and TLS material out of the retained record and logs:
+
+```ts
+import { readFile } from "node:fs/promises"
+import type { TestDatabaseRecoveryTls } from "@lyrolab/nest-shared/database"
+
+const configured = new URL(config.getOrThrow<string>("DATABASE_URL"))
+const caPath = configured.searchParams.get("sslrootcert")
+if (!caPath) throw new Error("Explicit TLS trust material is required")
+const certPath = configured.searchParams.get("sslcert")
+const keyPath = configured.searchParams.get("sslkey")
+if (Boolean(certPath) !== Boolean(keyPath))
+  throw new Error("Both client certificate and key are required")
+const tls: TestDatabaseRecoveryTls = {
+  caPem: await readFile(caPath, "utf8"),
+  ...(certPath && keyPath
+    ? {
+        certPem: await readFile(certPath, "utf8"),
+        keyPem: await readFile(keyPath, "utf8"),
+      }
+    : {}),
+}
+const explicit = new URL("postgresql://localhost")
+explicit.hostname = configured.hostname
+explicit.port = configured.port
+explicit.username = configured.username
+explicit.password = configured.password
+explicit.pathname = configured.pathname
+explicit.searchParams.set("sslmode", "verify-full")
+const base = { databaseUrl: explicit.toString(), expectedRole, tls }
+// Pass base to recoverTestDatabase after caller-owned preparation finishes.
+```
+
+The preparation example uses ordinary filesystem calls; their deadlines, cancellation and cleanup belong to the caller. Recovery starts no file work and does not strip file parameters for you. Its captured primitives keep later caller mutation from changing the target, trust or client identity.
+
 `saved` is your validated retained record and `controller` is an AbortController owned by your caller. Caller evidence is trusted input, not an authentication token. The function recomputes the original name under the same 63-byte rules, validates actual base/session/current role, acquires the target lock, and checks exact OID and direct ownership. It refuses templates, reserved/base/current databases, changed identity and same-name replacements. A saved OID found under a different name is refused rather than treated as absence.
 
 Recovery uses ordinary `DROP DATABASE`, with no FORCE, peer termination, elevated role, fixture setup, migrations or data changes. A connected target makes it fail. No DDL is retried automatically. Only an explicit later recovery can confirm an uncertain outcome or return `already-absent`. Neither recovery result changes the current `SharedDatabaseModule` invocation.
 
-`timeoutMs` bounds the work phase (default 30,000 ms, maximum 300,000 ms). `closeTimeoutMs` separately bounds mandatory close (default 5,000 ms, maximum 30,000 ms); both must be positive integers. Total time is bounded by their sum plus event-loop scheduling. Close reserves its final half for forced disposal and closure confirmation of the helper-owned socket. Cancellation or work deadline stops dispatch and disposes the socket immediately. A graceful-close failure still rejects even if forced disposal succeeds. Ordinary callers need no forced process exit.
+`timeoutMs` starts at invocation and bounds capture, child startup/module loading, IPC, DNS/TLS/authentication and database work (default 30,000 ms, maximum 300,000 ms). `closeTimeoutMs` separately bounds mandatory close (default 5,000 ms, maximum 30,000 ms); both must be positive integers. Total time is bounded by their sum plus event-loop scheduling. Close reserves its final half for termination and observed disposal of the exact library-owned child, including closed IPC and completed sends. The first half contains graceful session close and owned-socket disposal. Cancellation or work deadline stops further DROP permission and interrupts the child session. A graceful-close failure or forced child termination retains CLOSE_FAILED even after disposal succeeds. Child termination contains queued DNS/crypto work; it does not prove remote lock release or a DROP outcome. Ordinary callers exit naturally.
 
-`TestDatabaseRecoveryError` exposes only fixed safe diagnostics: `code`, `phase`, `outcome` and ordered `failures`. Preserve the whole failure list, including CLOSE_FAILED alongside any primary failure. `not-attempted` means DROP was never dispatched; `unknown` means deletion may have completed. `removed` and `already-absent` on an error retain the observed absence but do not mean cleanup succeeded. Keep earlier failures when recording a later successful retry. Raw server errors, connection details, names and OIDs are not attached to the public error.
+`TestDatabaseRecoveryError` exposes only fixed safe diagnostics: `code`, `phase`, `outcome` and ordered `failures`. Preserve the whole failure list, including CLOSE_FAILED alongside any primary failure. `not-attempted` means the parent never granted DROP permission. It records `unknown` before attempting to send permission; send failure, cancellation or child death cannot establish that SQL did not run. Verified absence can establish a more precise outcome. `removed` and `already-absent` on an error retain the observed absence but do not mean cleanup succeeded. Keep earlier failures when recording a later successful retry. Raw server errors, connection details, names and OIDs are not attached to the public error.
 
 Each active normal invocation holds one extra base connection from before CREATE until target owners close, exact deletion is verified and the lease closes. The same session advisory lock covers setup, active use, clear and teardown. Cooperating recovery returns BUSY while that lease is held; different targets remain independent. Lease loss blocks new setup/clear/use. Cleanup retry reacquires the lock and revalidates saved identity before DDL. Target close failures retain cleanup state and the lease; a confirmed DROP followed by close failure also retains retry state.
 

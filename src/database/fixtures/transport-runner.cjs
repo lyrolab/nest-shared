@@ -164,6 +164,22 @@ async function configurationChild(scenario, port, certificateDir) {
       return original(...args)
     }
   }
+  for (const key of [
+    "open",
+    "openSync",
+    "stat",
+    "statSync",
+    "readFile",
+    "readFileSync",
+    "close",
+    "closeSync",
+  ]) {
+    const original = fs[key]
+    fs[key] = (...args) => {
+      fileWork++
+      return original(...args)
+    }
+  }
   const processes = require("node:child_process")
   const originalSpawn = processes.spawn
   processes.spawn = (...args) => {

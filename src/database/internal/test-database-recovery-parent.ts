@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import { join } from "node:path"
 import { performance } from "node:perf_hooks"
 import type { captureRecoveryInput } from "../helpers/test-database-recovery-input"
@@ -35,17 +35,24 @@ export async function superviseRecovery(
     throw new TestDatabaseRecoveryError([
       { code: initialFailure, phase: "connect" },
     ])
-  const child = spawn(
-    process.execPath,
-    [join(__dirname, "test-database-recovery-child.js")],
-    {
-      env: {},
-      shell: false,
-      detached: false,
-      serialization: "json",
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-    },
-  )
+  let child: ChildProcess
+  try {
+    child = spawn(
+      process.execPath,
+      [join(__dirname, "test-database-recovery-child.js")],
+      {
+        env: {},
+        shell: false,
+        detached: false,
+        serialization: "json",
+        stdio: ["ignore", "ignore", "ignore", "ipc"],
+      },
+    )
+  } catch {
+    throw new TestDatabaseRecoveryError([
+      { code: "DATABASE_FAILURE", phase: "connect" },
+    ])
+  }
   let phase: TestDatabaseRecoveryPhase = "connect"
   const state = { outcome: "not-attempted" as TestDatabaseRecoveryOutcome }
   const failures: TestDatabaseRecoveryFailure[] = []

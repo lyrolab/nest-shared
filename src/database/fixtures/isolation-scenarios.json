@@ -99,5 +99,11 @@
     "preabort": true,
     "code": "CANCELLED",
     "outcome": "not-attempted"
+  },
+  {
+    "name": "denied-launch",
+    "deniedLaunch": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
   }
 ]
