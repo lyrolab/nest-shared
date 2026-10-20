@@ -108,6 +108,8 @@ function childFixture() {
   })
   const originalSend = process.send.bind(process)
   process.send = (message, ...args) => {
+    if (scenario.unpermittedResult && message.type === "ready")
+      message = { version: 1, type: "result", outcome: "removed", failures: [] }
     if (scenario.badReady && message.type === "ready")
       message = { version: 99, type: "ready" }
     if (scenario.malformedClosing && message.type === "closing")
@@ -127,6 +129,8 @@ function childFixture() {
         ],
       }
     const result = originalSend(message, ...args)
+    if (scenario.duplicateClosing && message.type === "closing")
+      originalSend(message)
     if (scenario.duplicateReady && message.type === "ready")
       originalSend(message)
     return result
@@ -138,6 +142,7 @@ function childFixture() {
   TestDatabaseSession.create = async () => ({
     healthy: true,
     connect: async () => {
+      if (scenario.crash === "connect") process.kill(process.pid, "SIGKILL")
       if (scenario.rejectConnect) throw new Error("Fixture connection failure")
       if (scenario.stall === "connect") await pause()
     },
@@ -219,6 +224,9 @@ async function caller() {
     secure = false,
     clientVerified = false,
     passwordObserved = false
+  let emergencyTimer,
+    originalKill,
+    emergencyWatchdog = false
   let connections = 0
   let port = 5432
   if (scenario.tls) {
@@ -499,6 +507,14 @@ async function caller() {
           : [__filename, "--engine", scenario.name],
         options,
       )
+      if (scenario.parentLoss) {
+        originalKill = owned.kill.bind(owned)
+        owned.kill = () => false
+        emergencyTimer = setTimeout(() => {
+          emergencyWatchdog = true
+          originalKill("SIGKILL")
+        }, 1500)
+      }
       const emit = owned.emit
       owned.emit = function (event, ...values) {
         if (event === "exit" && scenario.delayedExit) {
@@ -650,6 +666,7 @@ async function caller() {
       `Invocation exceeded its budget: ${elapsedMs}`,
     )
     if (scenario.acquisition) {
+      assert.equal(emergencyWatchdog, false)
       assert.equal(acquisitions, 1)
       assert.equal(settlements, 0)
       assert.equal(queries, 0)
@@ -688,9 +705,12 @@ async function caller() {
         queries,
         backpressure,
         forcedChild: owned?.signalCode === "SIGKILL",
+        childSelfDisposal: !!scenario.parentLoss,
       }),
     )
   } finally {
+    clearTimeout(emergencyTimer)
+    if (originalKill) owned.kill = originalKill
     if (owned && owned.exitCode === null && owned.signalCode === null) {
       const closed = once(owned, "close")
       owned.kill("SIGKILL")

@@ -304,5 +304,23 @@
     "closeFailure": true,
     "code": "CLOSE_FAILED",
     "outcome": "removed"
+  },
+  {
+    "name": "crash-before-permit",
+    "crash": "connect",
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "duplicate-closing",
+    "duplicateClosing": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "removed"
+  },
+  {
+    "name": "unpermitted-result",
+    "unpermittedResult": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
   }
 ]
