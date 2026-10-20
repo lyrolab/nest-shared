@@ -1,0 +1,203 @@
+[
+  {
+    "name": "plain-idle",
+    "tls": false,
+    "phase": "idle",
+    "forced": true
+  },
+  {
+    "name": "plain-active",
+    "tls": false,
+    "phase": "active"
+  },
+  {
+    "name": "plain-connect-abort",
+    "tls": false,
+    "phase": "startup",
+    "interrupt": true
+  },
+  {
+    "name": "tls-negotiation-abort",
+    "tls": true,
+    "phase": "handshake",
+    "interrupt": true
+  },
+  {
+    "name": "tls-connect-abort",
+    "tls": true,
+    "phase": "startup",
+    "interrupt": true
+  },
+  {
+    "name": "tls-idle",
+    "tls": true,
+    "phase": "idle",
+    "forced": true
+  },
+  {
+    "name": "tls-active",
+    "tls": true,
+    "phase": "active"
+  },
+  {
+    "name": "tls-untrusted",
+    "tls": true,
+    "phase": "certificate",
+    "untrusted": true
+  },
+  {
+    "name": "tls-wrong-dns",
+    "tls": true,
+    "phase": "certificate",
+    "mismatch": true
+  },
+  {
+    "name": "tls-wrong-ip",
+    "tls": true,
+    "phase": "certificate",
+    "mismatch": true,
+    "ip": true
+  },
+  {
+    "name": "plain-active-abort",
+    "tls": false,
+    "phase": "active",
+    "interrupt": true
+  },
+  {
+    "name": "tls-active-abort",
+    "tls": true,
+    "phase": "active",
+    "interrupt": true
+  },
+  {
+    "name": "tls-valid-ip",
+    "tls": true,
+    "phase": "idle",
+    "ip": true,
+    "forced": true
+  },
+  {
+    "name": "config-fifo-sslrootcert-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslrootcert-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-fifo-sslcert-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslcert-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-fifo-sslkey-deadline",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslkey-cancel",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-read-deadline",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-read-cancel",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "mode": "cancel"
+  },
+  {
+    "name": "config-directory",
+    "phase": "configuration",
+    "file": "directory",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-device",
+    "phase": "configuration",
+    "file": "device",
+    "key": "sslrootcert",
+    "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslrootcert-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "refusal"
+  },
+  {
+    "name": "config-fifo-sslcert-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "refusal"
+  },
+  {
+    "name": "config-fifo-sslkey-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "refusal"
+  },
+  {
+    "name": "config-encoded-path-under-contention",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "encoded": true,
+    "mode": "deadline"
+  },
+  {
+    "name": "config-duplicate-path-under-contention",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "duplicate": true,
+    "mode": "cancel"
+  },
+  {
+    "name": "config-disabled-path-under-contention",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslkey",
+    "disable": true,
+    "mode": "deadline"
+  },
+  {
+    "name": "config-pem-and-path-under-contention",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "material": true,
+    "mode": "cancel"
+  }
+]

@@ -1,3 +1,5 @@
 export * from "./shared-database.module"
 export * from "./filters/typeorm-exception.filter"
 export * from "./create-cli-data-source"
+export * from "./recover-test-database"
+export * from "./test-database-recovery-error"

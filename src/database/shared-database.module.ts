@@ -6,11 +6,20 @@ import {
 } from "@nestjs/common"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { TypeOrmModule, TypeOrmModuleOptions } from "@nestjs/typeorm"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { join } from "path"
 import { findMainPath } from "./helpers/find-main-path"
 import { DataSource, DataSourceOptions } from "typeorm"
+import {
+  quoteIdentifier,
+  testDatabaseName,
+  testDatabaseLockKey,
+} from "./helpers/test-database-identity"
+
+import { captureTestDatabaseBase } from "./helpers/test-database-recovery-input"
+import { TestDatabaseSession } from "./helpers/test-database-session"
+import { TestDatabaseRecoveryError } from "./test-database-recovery-error"
 
 const ENTITIES_PATH = "**/*.entity.{ts,js}"
 const MIGRATIONS_PATH = "dist/migrations/**/*.{ts,js}"
@@ -43,12 +52,6 @@ export interface ForTestOptions {
 
 export function createTestDatabaseInvocation(): TestDatabaseInvocation {
   return Object.freeze({ namespace: `${process.pid}-${randomUUID()}` })
-}
-
-function quoteIdentifier(identifier: string): string {
-  if (!identifier || identifier.includes("\0"))
-    throw new Error("Invalid database identifier")
-  return `"${identifier.replaceAll('"', '""')}"`
 }
 
 function throwErrors(errors: unknown[], message: string): void {
@@ -84,8 +87,9 @@ export class SharedDatabaseModule {
   private static testOptions?: ForTestOptions
   private static testDataSource?: DataSource
   private static sources = new Set<DataSource>()
-  private static admins = new Set<DataSource>()
-  private static owned?: { name: string; oid?: number }
+  private static lease?: TestDatabaseSession
+  private static leaseLocked = false
+  private static owned?: { name: string; oid?: number; dropAttempted?: boolean }
   private static setupPromise?: Promise<void>
   private static busy?: "setup" | "clear" | "close"
   private static initializing = 0
@@ -165,24 +169,7 @@ export class SharedDatabaseModule {
     quoteIdentifier(baseName)
     const identity = this.identity!
     const namespace = this.invocation!.namespace
-    const digest = createHash("sha256")
-      .update(
-        JSON.stringify([
-          baseName,
-          namespace,
-          identity.processId,
-          identity.workerId,
-        ]),
-      )
-      .digest("hex")
-      .slice(0, 32)
-    const suffix = `_test_${digest}`
-    let prefix = ""
-    for (const character of baseName) {
-      if (Buffer.byteLength(prefix + character + suffix) > 63) break
-      prefix += character
-    }
-    const databaseName = prefix + suffix
+    const databaseName = testDatabaseName(baseName, { namespace, ...identity })
     url.pathname = `/${encodeURIComponent(databaseName)}`
     const info = Object.freeze({ namespace, ...identity, databaseName })
     this.configuration = { baseUrl, url: url.toString(), info }
@@ -192,7 +179,7 @@ export class SharedDatabaseModule {
   static forTest(options: ForTestOptions): DynamicModule {
     this.initializeTestInvocation()
     if (this.busy) throw new Error(`Test database is busy: ${this.busy}`)
-    if (this.cleanupRequired)
+    if (this.cleanupRequired || (this.lease && !this.lease.healthy))
       throw new Error("Test database cleanup must succeed before setup")
     if (
       options.migrationsRun &&
@@ -239,6 +226,7 @@ export class SharedDatabaseModule {
             if (
               this.busy ||
               this.cleanupRequired ||
+              !this.lease?.healthy ||
               !this.testDataSource?.isInitialized
             )
               throw new Error("Test database is not ready for Nest")
@@ -246,7 +234,10 @@ export class SharedDatabaseModule {
             this.sources.add(source)
             this.initializing++
             try {
-              return await source.initialize()
+              await source.initialize()
+              if (!this.lease?.healthy)
+                throw new Error("Test database lease was lost")
+              return source
             } finally {
               this.initializing--
             }
@@ -278,11 +269,11 @@ export class SharedDatabaseModule {
     if (!this.testOptions)
       throw new Error("Call forTest before setupTestDatabase")
     this.getTestDatabaseInfo(configService)
-    if (this.cleanupRequired)
+    if (this.cleanupRequired || (this.lease && !this.lease.healthy))
       throw new Error("Test database cleanup must succeed before setup")
     if (this.setupPromise) return this.setupPromise
     if (this.testDataSource?.isInitialized) return
-    if (this.owned || this.sources.size || this.admins.size)
+    if (this.owned || this.sources.size || this.lease)
       throw new Error("Test database cleanup must succeed before setup")
     this.busy = "setup"
     this.setupPromise = this.setup()
@@ -296,12 +287,11 @@ export class SharedDatabaseModule {
 
   private static async setup(): Promise<void> {
     try {
-      await this.withAdmin(async (admin) => {
-        const name = this.configuration!.info.databaseName
-        await admin.query(`CREATE DATABASE ${quoteIdentifier(name)}`)
-        this.owned = { name }
-        this.owned.oid = await this.databaseOid(admin, name)
-      })
+      await this.acquireLease()
+      const name = this.configuration!.info.databaseName
+      await this.adminQuery(`CREATE DATABASE ${quoteIdentifier(name)}`)
+      this.owned = { name }
+      this.owned.oid = await this.databaseOid(name)
       const options = this.connectionOptions()
       // TypeORM initialize can replace a schema error with its automatic destroy error.
       const source = new DataSource({
@@ -313,6 +303,7 @@ export class SharedDatabaseModule {
       await source.initialize()
       if (this.testOptions!.migrationsRun) await source.runMigrations()
       if (options.synchronize) await source.synchronize()
+      if (!this.lease?.healthy) throw new Error("Test database lease was lost")
       this.testDataSource = source
     } catch (error) {
       const errors = [error]
@@ -325,57 +316,85 @@ export class SharedDatabaseModule {
     }
   }
 
-  private static async withAdmin<T>(
-    action: (source: DataSource) => Promise<T>,
-  ): Promise<T> {
-    const source = new DataSource({
-      type: "postgres",
-      url: this.configuration!.baseUrl,
-      // TypeORM parses URL paths without decoding PostgreSQL database names.
-      database: decodeURIComponent(
-        new URL(this.configuration!.baseUrl).pathname.slice(1),
-      ),
-    })
-    this.admins.add(source)
-    const errors: unknown[] = []
-    let result: T | undefined
-    try {
-      await source.initialize()
-      result = await action(source)
-    } catch (error) {
-      errors.push(error)
-    } finally {
-      try {
-        await closeSource(source)
-        this.admins.delete(source)
-      } catch (error) {
-        errors.push(error)
-      }
-    }
-    throwErrors(errors, "Database administration and cleanup failed")
-    return result as T
+  private static async acquireLease(): Promise<void> {
+    if (this.lease?.healthy && this.leaseLocked) return
+    if (this.lease) await this.closeLease()
+    const url = new URL(this.configuration!.baseUrl)
+    const role = decodeURIComponent(url.username)
+    const { baseName: base } = captureTestDatabaseBase(
+      this.configuration!.baseUrl,
+      role,
+    )
+    this.lease = await TestDatabaseSession.create(this.configuration!.baseUrl)
+    await this.lease.connect(30_000)
+    const rows = await this.adminQuery<{
+      name: string
+      session: string
+      current: string
+      template: boolean
+    }>(`SELECT current_database() AS name, session_user AS session,
+      current_user AS current, datistemplate AS template
+      FROM pg_database WHERE datname = current_database()`)
+    if (
+      rows.length !== 1 ||
+      rows[0].name !== base ||
+      rows[0].session !== role ||
+      rows[0].current !== role ||
+      rows[0].template
+    )
+      throw new TestDatabaseRecoveryError([
+        { code: "IDENTITY_MISMATCH", phase: "connect" },
+      ])
+    const lock = await this.adminQuery<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock($1::bigint) AS locked",
+      [testDatabaseLockKey(this.configuration!.info.databaseName)],
+      "lock",
+    )
+    if (lock.length !== 1 || lock[0].locked !== true)
+      throw new TestDatabaseRecoveryError([{ code: "BUSY", phase: "lock" }])
+    this.leaseLocked = true
   }
 
-  private static async databaseOid(
-    source: DataSource,
-    name: string,
-  ): Promise<number> {
-    const rows = await source.query<{ oid: number }[]>(
+  private static async closeLease(): Promise<void> {
+    const lease = this.lease
+    if (!lease) return
+    this.leaseLocked = false
+    try {
+      await lease.close(5_000)
+      this.lease = undefined
+    } finally {
+      // A recorded close failure still rejects this attempt, even after disposal.
+      if (lease.disposed) this.lease = undefined
+    }
+  }
+
+  private static adminQuery<T extends object>(
+    text: string,
+    values: unknown[] = [],
+    phase: "inspect" | "lock" | "drop" | "verify" = "inspect",
+  ): Promise<T[]> {
+    if (!this.lease?.healthy)
+      throw new TestDatabaseRecoveryError([{ code: "DATABASE_FAILURE", phase }])
+    return this.lease.query<T>(text, values, phase, 30_000)
+  }
+
+  private static async databaseOid(name: string): Promise<number> {
+    const rows = await this.adminQuery<{ oid: number }>(
       "SELECT oid FROM pg_database WHERE datname = $1",
       [name],
     )
-    if (rows.length !== 1) throw new Error("Owned database is missing")
+    if (rows.length !== 1 || !Number.isInteger(rows[0].oid) || rows[0].oid <= 0)
+      throw new Error("Owned database is missing")
     return rows[0].oid
   }
 
-  private static async assertOwnership(source: DataSource): Promise<void> {
+  private static async assertOwnership(): Promise<void> {
     if (
       !this.owned?.oid ||
       this.owned.name !== this.configuration?.info.databaseName ||
-      (await this.databaseOid(source, this.owned.name)) !== this.owned.oid
-    ) {
+      (await this.databaseOid(this.owned.name)) !== this.owned.oid
+    )
       throw new Error("Test database ownership could not be verified")
-    }
   }
 
   static async clearTestDatabase(): Promise<void> {
@@ -384,7 +403,7 @@ export class SharedDatabaseModule {
     this.busy = "clear"
     try {
       const source = this.getTestDataSource()
-      await this.assertOwnership(source)
+      await this.assertOwnership()
       const rows = await source.query<{ name: string }[]>(
         "SELECT current_database() AS name",
       )
@@ -404,6 +423,7 @@ export class SharedDatabaseModule {
           `${quoteIdentifier(metadata.schema ?? this.testOptions?.schema ?? "public")}.${quoteIdentifier(metadata.tableName)}`,
         )
       }
+      if (!this.lease?.healthy) throw new Error("Test database lease was lost")
       if (tables.size)
         await source.query(`TRUNCATE TABLE ${[...tables].join(", ")} CASCADE`)
     } finally {
@@ -415,6 +435,7 @@ export class SharedDatabaseModule {
     if (
       !this.testDataSource?.isInitialized ||
       this.cleanupRequired ||
+      !this.lease?.healthy ||
       this.busy === "close"
     ) {
       throw new Error(
@@ -451,25 +472,60 @@ export class SharedDatabaseModule {
   private static async cleanup(): Promise<void> {
     this.cleanupRequired = true
     const errors: unknown[] = []
-    for (const sources of [this.sources, this.admins]) {
-      for (const source of sources) {
-        try {
-          await closeSource(source)
-          sources.delete(source)
-        } catch (error) {
-          errors.push(error)
-        }
+    for (const source of this.sources) {
+      try {
+        await closeSource(source)
+        this.sources.delete(source)
+      } catch (error) {
+        errors.push(error)
       }
     }
     if (errors.length === 0 && this.owned) {
       try {
-        await this.withAdmin(async (admin) => {
-          await this.assertOwnership(admin)
-          await admin.query(
-            `DROP DATABASE ${quoteIdentifier(this.owned!.name)}`,
+        await this.acquireLease()
+        const owned = this.owned
+        if (!owned.oid)
+          throw new Error("Test database ownership could not be verified")
+        const inspect = () =>
+          this.adminQuery<{
+            oid: number
+            name: string
+            owner: boolean
+            template: boolean
+          }>(
+            `SELECT oid, datname AS name, datdba = (SELECT oid FROM pg_roles WHERE rolname = current_user) AS owner,
+           datistemplate AS template FROM pg_database WHERE datname = $1 OR oid = $2::oid`,
+            [owned.name, owned.oid],
           )
+        const rows = await inspect()
+        if (rows.length === 0 && owned.dropAttempted) {
           this.owned = undefined
-        })
+        } else {
+          if (
+            rows.length !== 1 ||
+            rows[0].oid !== owned.oid ||
+            rows[0].name !== owned.name ||
+            rows[0].owner !== true ||
+            rows[0].template
+          )
+            throw new Error("Test database ownership could not be verified")
+          owned.dropAttempted = true
+          await this.adminQuery(
+            `DROP DATABASE ${quoteIdentifier(owned.name)}`,
+            [],
+            "drop",
+          )
+          if ((await inspect()).length !== 0)
+            throw new Error("Test database removal could not be verified")
+          this.owned = undefined
+        }
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+    if (errors.length === 0) {
+      try {
+        await this.closeLease()
       } catch (error) {
         errors.push(error)
       }

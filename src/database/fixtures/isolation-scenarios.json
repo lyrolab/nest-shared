@@ -1,0 +1,456 @@
+[
+  {
+    "name": "remove",
+    "status": "removed"
+  },
+  {
+    "name": "absent",
+    "absent": true,
+    "status": "already-absent"
+  },
+  {
+    "name": "connect-failure",
+    "rejectConnect": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "close-failure",
+    "rejectClose": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed"
+  },
+  {
+    "name": "close-stall",
+    "stallClose": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed",
+    "forced": true
+  },
+  {
+    "name": "cancel-before-permit",
+    "abort": "drop",
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "cancel-after-permit",
+    "abort": "permit",
+    "code": "CANCELLED",
+    "outcome": "unknown",
+    "stall": "permitted-recheck"
+  },
+  {
+    "name": "deadline-connect",
+    "stall": "connect",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "deadline-inspect",
+    "stall": "inspect",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "deadline-drop",
+    "stall": "drop",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "unknown"
+  },
+  {
+    "name": "deadline-verify",
+    "stall": "verify",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "unknown"
+  },
+  {
+    "name": "crash-after-permit",
+    "crash": "permit",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "crash-after-drop",
+    "crash": "drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "bad-version",
+    "badReady": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "duplicate-ready",
+    "duplicateReady": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "missing-entry",
+    "missingEntry": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "preabort",
+    "preabort": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "denied-launch",
+    "deniedLaunch": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "dns-deadline",
+    "acquisition": "dns",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-cancel",
+    "acquisition": "dns",
+    "cancelAcquisition": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-parent-loss",
+    "acquisition": "dns",
+    "parentLoss": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-deadline",
+    "acquisition": "scram",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-cancel",
+    "acquisition": "scram",
+    "cancelAcquisition": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-parent-loss",
+    "acquisition": "scram",
+    "parentLoss": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "cancel-before-ready",
+    "earlyCancel": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "startup-not-ready",
+    "noReady": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "real-ipc-backpressure",
+    "backpressure": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "start-send-failure",
+    "sendFailure": "start",
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "permit-send-failure",
+    "sendFailure": "permit-drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "parent-pool-contention",
+    "parentPool": true,
+    "status": "removed",
+    "closeTimeoutMs": 2000
+  },
+  {
+    "name": "impossible-verified-failure",
+    "malformedClosing": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown",
+    "forced": true
+  },
+  {
+    "name": "duplicate-primary-failure",
+    "duplicateFailure": true,
+    "rejectConnect": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "pem-dns",
+    "tls": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-ip",
+    "tls": true,
+    "ip": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-mutual",
+    "tls": true,
+    "mutual": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-capture",
+    "tls": true,
+    "mutation": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-unknown-ca",
+    "tls": true,
+    "untrusted": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-wrong-dns",
+    "tls": true,
+    "mismatch": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-wrong-ip",
+    "tls": true,
+    "mismatch": true,
+    "ip": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-malformed",
+    "tls": true,
+    "malformed": true,
+    "code": "INVALID_INPUT",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-mismatched-key",
+    "tls": true,
+    "keyMismatch": true,
+    "code": "INVALID_INPUT",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-active",
+    "tls": true,
+    "activeStall": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-handshake",
+    "tls": true,
+    "handshakeStall": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "explicit-empty-password",
+    "emptyPassword": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-active-cancel",
+    "tls": true,
+    "activeStall": true,
+    "cancelAtQuery": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-handshake-cancel",
+    "tls": true,
+    "handshakeStall": true,
+    "cancelHandshake": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "late-disposal-confirmation",
+    "delayedExit": true,
+    "closeFailure": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed"
+  },
+  {
+    "name": "crash-before-permit",
+    "crash": "connect",
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "duplicate-closing",
+    "duplicateClosing": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "removed"
+  },
+  {
+    "name": "unpermitted-result",
+    "unpermittedResult": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "dns-caller-death-result",
+    "acquisition": "dns",
+    "callerDeath": "result",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-finish",
+    "acquisition": "dns",
+    "callerDeath": "finish",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-finish-races",
+    "acquisition": "dns",
+    "callerDeath": "finish",
+    "races": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-disconnect",
+    "acquisition": "dns",
+    "callerDeath": "disconnect",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-terminal-self-disposal",
+    "acquisition": "dns",
+    "selfDisposal": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-result",
+    "acquisition": "scram",
+    "callerDeath": "result",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-finish",
+    "acquisition": "scram",
+    "callerDeath": "finish",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-finish-races",
+    "acquisition": "scram",
+    "callerDeath": "finish",
+    "races": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-disconnect",
+    "acquisition": "scram",
+    "callerDeath": "disconnect",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-terminal-self-disposal",
+    "acquisition": "scram",
+    "selfDisposal": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-child-start",
+    "acquisition": "dns",
+    "callerDeath": "child-start",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-acquisition",
+    "acquisition": "dns",
+    "callerDeath": "acquisition",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-child-start",
+    "acquisition": "scram",
+    "callerDeath": "child-start",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-acquisition",
+    "acquisition": "scram",
+    "callerDeath": "acquisition",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "terminal-success-self-disposal",
+    "absent": true,
+    "terminalNative": true,
+    "selfDisposal": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "already-absent",
+    "forced": true
+  }
+]

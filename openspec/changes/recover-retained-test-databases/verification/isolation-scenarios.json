@@ -1,0 +1,175 @@
+[
+  {
+    "name": "process-exit-workerpool-control",
+    "terminationControl": true
+  },
+  {
+    "name": "pre-abort",
+    "preAbort": true
+  },
+  {
+    "name": "dns-deadline",
+    "acquisition": "dns",
+    "force": true
+  },
+  {
+    "name": "dns-cancel",
+    "acquisition": "dns",
+    "cancel": true,
+    "force": true
+  },
+  {
+    "name": "scram-deadline",
+    "acquisition": "scram",
+    "force": true
+  },
+  {
+    "name": "scram-cancel",
+    "acquisition": "scram",
+    "cancel": true,
+    "force": true
+  },
+  {
+    "name": "dns-parent-disconnect",
+    "acquisition": "dns",
+    "disconnectOnAcquisition": true,
+    "selfExit": true
+  },
+  {
+    "name": "scram-parent-disconnect",
+    "acquisition": "scram",
+    "disconnectOnAcquisition": true,
+    "selfExit": true
+  },
+  {
+    "name": "cold-start-deadline",
+    "cold": true,
+    "natural": true
+  },
+  {
+    "name": "cancel-before-ready",
+    "earlyCancel": true,
+    "natural": true
+  },
+  {
+    "name": "missing-private-entry",
+    "startupFailure": true
+  },
+  {
+    "name": "parent-pool-contention",
+    "parentPool": true,
+    "natural": true
+  },
+  {
+    "name": "plaintext-idle",
+    "phase": "idle",
+    "natural": true
+  },
+  {
+    "name": "plaintext-active",
+    "phase": "active",
+    "natural": true
+  },
+  {
+    "name": "tls-idle-dns",
+    "tls": true,
+    "phase": "idle",
+    "natural": true
+  },
+  {
+    "name": "tls-active-ip",
+    "tls": true,
+    "ip": true,
+    "phase": "active",
+    "natural": true
+  },
+  {
+    "name": "tls-negotiation-stall",
+    "tls": true,
+    "phase": "handshake",
+    "natural": true
+  },
+  {
+    "name": "tls-mutual",
+    "tls": true,
+    "mutual": true,
+    "natural": true
+  },
+  {
+    "name": "tls-unknown-ca",
+    "tls": true,
+    "untrusted": true,
+    "natural": true
+  },
+  {
+    "name": "tls-wrong-dns",
+    "tls": true,
+    "mismatch": true,
+    "natural": true
+  },
+  {
+    "name": "tls-wrong-ip",
+    "tls": true,
+    "mismatch": true,
+    "ip": true,
+    "natural": true
+  },
+  {
+    "name": "tls-caller-mutation",
+    "tls": true,
+    "mutation": true,
+    "natural": true
+  },
+  {
+    "name": "ipc-backpressure",
+    "ipcStall": true,
+    "force": true
+  },
+  {
+    "name": "ipc-disconnect",
+    "disconnect": true,
+    "natural": true
+  },
+  {
+    "name": "ipc-send-failure",
+    "disconnect": true,
+    "sendFailure": true,
+    "natural": true
+  },
+  {
+    "name": "child-crash-before-permit",
+    "crash": true
+  },
+  {
+    "name": "child-crash-after-permit",
+    "crashAfterPermit": true,
+    "unknown": true
+  },
+  {
+    "name": "abort-at-permit-request",
+    "abortAtPermit": true,
+    "natural": true
+  },
+  {
+    "name": "abort-after-permit",
+    "abortAfterPermit": true,
+    "unknown": true,
+    "natural": true
+  },
+  {
+    "name": "duplicate-permit-request",
+    "duplicate": true,
+    "unknown": true,
+    "natural": true
+  },
+  {
+    "name": "malformed-message",
+    "malformed": true,
+    "natural": true
+  },
+  {
+    "name": "verified-result-natural",
+    "complete": true,
+    "natural": true
+  }
+]

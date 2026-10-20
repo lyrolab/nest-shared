@@ -1,0 +1,129 @@
+[
+  {
+    "name": "wrong actual base",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "patch": {
+      "name": "foreign"
+    }
+  },
+  {
+    "name": "wrong session role",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "patch": {
+      "session": "foreign"
+    }
+  },
+  {
+    "name": "changed current role",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "patch": {
+      "current": "foreign"
+    }
+  },
+  {
+    "name": "template base",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "patch": {
+      "template": true
+    }
+  },
+  {
+    "name": "ambiguous binding",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "duplicate": true
+  },
+  {
+    "name": "ambiguous lock",
+    "at": "lock",
+    "code": "BUSY",
+    "outcome": "not-attempted",
+    "duplicate": true
+  },
+  {
+    "name": "ambiguous inspect",
+    "at": "inspect",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "duplicate": true
+  },
+  {
+    "name": "ambiguous recheck",
+    "at": "recheck",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "duplicate": true
+  },
+  {
+    "name": "missing base catalog",
+    "at": "binding",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "empty": true
+  },
+  {
+    "name": "target disappears before DROP",
+    "at": "recheck",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "not-attempted",
+    "empty": true
+  },
+  {
+    "name": "lost DROP acknowledgement",
+    "at": "drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown",
+    "reject": true,
+    "closeFailure": true
+  },
+  {
+    "name": "failed post-DROP lookup",
+    "at": "verify",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown",
+    "reject": true,
+    "closeFailure": true
+  },
+  {
+    "name": "replacement after DROP",
+    "at": "verify",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "unknown",
+    "patch": {
+      "oid": 99
+    }
+  },
+  {
+    "name": "renamed OID after DROP",
+    "at": "verify",
+    "code": "IDENTITY_MISMATCH",
+    "outcome": "unknown",
+    "patch": {
+      "name": "renamed"
+    }
+  },
+  {
+    "name": "confirmed removal with failed close",
+    "at": "close",
+    "code": "CLOSE_FAILED",
+    "outcome": "removed",
+    "closeFailure": true
+  },
+  {
+    "name": "confirmed absence with failed close",
+    "at": "inspect",
+    "code": "CLOSE_FAILED",
+    "outcome": "already-absent",
+    "empty": true,
+    "closeFailure": true
+  }
+]

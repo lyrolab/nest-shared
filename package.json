@@ -136,7 +136,8 @@
     "nest-casl": "^1.9.0",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.22",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "pg": "^8.23.1"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/provider": {
@@ -173,6 +174,9 @@
       "optional": true
     },
     "nest-casl": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   },
@@ -244,7 +248,8 @@
     "typeorm": "^0.3.22",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.20.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@types/pg": "^8.20.0"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -278,5 +283,9 @@
     "*.{js,ts}": [
       "eslint --fix"
     ]
-  }
+  },
+  "files": [
+    "dist",
+    "src/*/README.md"
+  ]
 }

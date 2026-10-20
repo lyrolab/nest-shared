@@ -1,0 +1,52 @@
+[
+  {
+    "name": "missing OID",
+    "mutation": "missing-oid",
+    "code": "INVALID_INPUT"
+  },
+  {
+    "name": "wrong OID",
+    "mutation": "wrong-oid",
+    "code": "IDENTITY_MISMATCH"
+  },
+  {
+    "name": "wrong name",
+    "mutation": "wrong-name",
+    "code": "IDENTITY_MISMATCH"
+  },
+  {
+    "name": "malformed evidence",
+    "mutation": "malformed",
+    "code": "INVALID_INPUT"
+  },
+  {
+    "name": "same-name replacement",
+    "mutation": "replacement",
+    "code": "IDENTITY_MISMATCH"
+  },
+  {
+    "name": "renamed target",
+    "mutation": "rename",
+    "code": "IDENTITY_MISMATCH"
+  },
+  {
+    "name": "foreign direct owner",
+    "mutation": "owner",
+    "code": "OWNERSHIP_MISMATCH"
+  },
+  {
+    "name": "connected target",
+    "mutation": "connected",
+    "code": "DATABASE_FAILURE"
+  },
+  {
+    "name": "independent wrong base",
+    "mutation": "base",
+    "code": "IDENTITY_MISMATCH"
+  },
+  {
+    "name": "independent wrong role",
+    "mutation": "role",
+    "code": "INVALID_INPUT"
+  }
+]

@@ -71,7 +71,7 @@ Equivalent registrations are allowed. Changing options requires `resetTestDataba
 
 `clearTestDatabase()` truncates ordinary entity and junction tables, with quoted schema/table identifiers. Views and migration history are excluded. Migration-only tables without entity metadata are outside automatic fixture clearing. Foreign-database metadata is rejected. Calling clear before setup is harmless.
 
-Finish app work and close every Nest application or testing context before releasing the database. Nest's test lifecycle hook reports destroy failures. Explicit `closeTestConnection()` attempts every tracked owner and admin pool, then drops the successfully created database only after all owners close and its catalog OID matches. It uses ordinary DROP; another open connection makes cleanup reject. It never terminates sessions or uses FORCE.
+Finish app work and close every Nest application or testing context before releasing the database. Nest's test lifecycle hook reports destroy failures. Explicit `closeTestConnection()` attempts every tracked target owner, then drops the successfully created database only after all owners close and its catalog OID matches. It uses ordinary DROP; another open connection makes cleanup reject. It never terminates sessions or uses FORCE.
 
 Always attempt explicit cleanup even after setup, test, or app shutdown fails:
 
@@ -108,7 +108,115 @@ if (errors.length > 1)
 
 Successful close is idempotent and invalidates `getTestDataSource()`. Setup can then recreate the database with the recorded options and identity. Cleanup failures retain state for retry and block new setup. `resetTestDatabase()` performs full cleanup, then forgets the options, URL, and invocation. It rejects without forgetting state if cleanup fails. Setup, clear, close, and reset reject incompatible overlapping operations; wait for the active operation before retrying.
 
-An interrupted process can leave its database behind. The library does not scan for or reclaim abandoned databases. A replacement database with another OID is preserved and cleanup fails. Report that ownership failure; only the server owner can decide how to remove external data. Do not force runner exits or suppress cleanup errors.
+An interrupted process can leave its database behind. Use exact recovery below after establishing exclusive access; the library never scans for abandoned databases. A replacement database with another OID is preserved and cleanup fails. Report that ownership failure; only the server owner can decide how to remove external data. Do not force runner exits or suppress cleanup errors.
+
+## Recover an exact retained database
+
+`recoverTestDatabase` works in a fresh ordinary Node, Jest or Vitest process on Linux. The caller must be allowed to launch and terminate one owned Node child; the installed package includes its private entry. Recovery has no in-process fallback. Install `pg ^8.23.1` when using test administration. The administration helper supports Node TCP and pg's PostgreSQL SSLRequest negotiation, with pg TLS and certificate/hostname checks intact. Unix sockets, custom streams, direct TLS negotiation and connection-string binding overrides are refused. Production `forRoot` configuration is independent of these administration bounds.
+
+Recovery accepts in-memory TLS PEM strings through `base.tls`: required `caPem` and optional paired `certPem`/`keyPem`. Load and validate their source configuration before invocation; preparation has its own caller-owned lifecycle and is outside `timeoutMs`. Every URL certificate path (`sslrootcert`, `sslcert`, `sslkey`) is refused, including empty or duplicated parameters and paths combined with `sslmode=disable` or PEM material. Normal `forRoot`/`forTest`/setup/reset TLS URL behavior is independent of this recovery-only requirement.
+
+With no `base.tls`, omit `sslmode` or use `disable` for plain TCP. With PEM material, omit `sslmode` or use `require`, `verify-ca` or `verify-full`; all three retain full certificate and DNS/IP identity checks. `disable` conflicts with PEM material. Unknown or duplicated URL options, broad TLS options, callbacks, buffers and arrays are refused. PEM strings must be nonempty, valid Unicode and NUL-free, at most 1 MiB each. Client certificate/key must match and cannot require a passphrase. TLS failures never trigger a plaintext retry.
+
+After successful setup, save the original info and a positively observed OID in a restricted record:
+
+```ts
+import { ConfigService } from "@nestjs/config"
+import {
+  SharedDatabaseModule,
+  type TestDatabaseInfo,
+} from "@lyrolab/nest-shared/database"
+
+const config = new ConfigService()
+SharedDatabaseModule.forTest({ entities: [] })
+await SharedDatabaseModule.setupTestDatabase(config)
+const database: TestDatabaseInfo =
+  SharedDatabaseModule.getTestDatabaseInfo(config)
+const source = SharedDatabaseModule.getTestDataSource()
+const rows: { oid: number }[] = await source.query(
+  "SELECT oid FROM pg_database WHERE datname = current_database()",
+)
+if (rows.length !== 1 || !Number.isInteger(rows[0].oid) || rows[0].oid <= 0)
+  throw new Error("Database acquisition was not confirmed")
+const saved = { database, acquiredOid: rows[0].oid }
+// Persist saved durably with restricted permissions before starting disposable work.
+```
+
+The application owns record persistence. Store no credentials in this record. Keep the original namespace, creator PID, worker ID, database name and OID unchanged. Existing records with these fields need no extra token; records without acquisition evidence are refused. Looking up an arbitrary existing name does not establish acquisition.
+
+Before recovery, confirm the original creator has stopped and ensure no outside actor can rename, replace, change ownership of, connect to or recreate the target during recovery. An exclusive target is required even when an advisory lock can be acquired. If that prerequisite is unknown, do not recover.
+
+Resolve the base configuration independently through the normal ConfigService and `DATABASE_URL`. Validate its host, port, base database, role and disposable purpose against your own allowed configuration; do not copy a connection URL from the saved record. Then, in the fresh process:
+
+```ts
+import { ConfigService } from "@nestjs/config"
+import { recoverTestDatabase } from "@lyrolab/nest-shared/database"
+
+const config = new ConfigService()
+const databaseUrl = config.getOrThrow<string>("DATABASE_URL")
+// Your independently validated disposable role; do not derive trust from saved evidence.
+const expectedRole = "disposable_role"
+const result = await recoverTestDatabase({
+  base: { databaseUrl, expectedRole },
+  database: saved.database,
+  acquiredOid: saved.acquiredOid,
+  exclusiveTarget: true,
+  timeoutMs: 30_000,
+  closeTimeoutMs: 5_000,
+  signal: controller.signal,
+})
+// Both statuses confirm exact absence and successful child disposal.
+if (result.status === "removed" || result.status === "already-absent") {
+  // Durably record success before deleting the retained journal.
+}
+```
+
+For an existing TLS URL with certificate paths, independently validate its endpoint, role and file sources first. Prepare the material, then deliberately construct an equivalent explicit base URL. Keep credentials and TLS material out of the retained record and logs:
+
+```ts
+import { readFile } from "node:fs/promises"
+import type { TestDatabaseRecoveryTls } from "@lyrolab/nest-shared/database"
+
+const configured = new URL(config.getOrThrow<string>("DATABASE_URL"))
+const caPath = configured.searchParams.get("sslrootcert")
+if (!caPath) throw new Error("Explicit TLS trust material is required")
+const certPath = configured.searchParams.get("sslcert")
+const keyPath = configured.searchParams.get("sslkey")
+if (Boolean(certPath) !== Boolean(keyPath))
+  throw new Error("Both client certificate and key are required")
+const tls: TestDatabaseRecoveryTls = {
+  caPem: await readFile(caPath, "utf8"),
+  ...(certPath && keyPath
+    ? {
+        certPem: await readFile(certPath, "utf8"),
+        keyPem: await readFile(keyPath, "utf8"),
+      }
+    : {}),
+}
+const explicit = new URL("postgresql://localhost")
+explicit.hostname = configured.hostname
+explicit.port = configured.port
+explicit.username = configured.username
+explicit.password = configured.password
+explicit.pathname = configured.pathname
+explicit.searchParams.set("sslmode", "verify-full")
+const base = { databaseUrl: explicit.toString(), expectedRole, tls }
+// Pass base to recoverTestDatabase after caller-owned preparation finishes.
+```
+
+The preparation example uses ordinary filesystem calls; their deadlines, cancellation and cleanup belong to the caller. Recovery starts no file work and does not strip file parameters for you. Its captured primitives keep later caller mutation from changing the target, trust or client identity.
+
+`saved` is your validated retained record and `controller` is an AbortController owned by your caller. Caller evidence is trusted input, not an authentication token. The function recomputes the original name under the same 63-byte rules, validates actual base/session/current role, acquires the target lock, and checks exact OID and direct ownership. It refuses templates, reserved/base/current databases, changed identity and same-name replacements. A saved OID found under a different name is refused rather than treated as absence.
+
+Recovery uses ordinary `DROP DATABASE`, with no FORCE, peer termination, elevated role, fixture setup, migrations or data changes. A connected target makes it fail. No DDL is retried automatically. Only an explicit later recovery can confirm an uncertain outcome or return `already-absent`. Neither recovery result changes the current `SharedDatabaseModule` invocation.
+
+`timeoutMs` starts at invocation and bounds capture, child startup/module loading, IPC, DNS/TLS/authentication and database work (default 30,000 ms, maximum 300,000 ms). `closeTimeoutMs` separately bounds mandatory close (default 5,000 ms, maximum 30,000 ms); both must be positive integers. Total time is bounded by their sum plus event-loop scheduling. Close reserves its final half for termination and observed disposal of the exact library-owned child, including closed IPC and completed sends. The first half contains graceful session close and owned-socket disposal. Cancellation or work deadline stops further DROP permission and interrupts the child session. A graceful-close failure or forced child termination retains CLOSE_FAILED even after disposal succeeds. Child termination contains queued DNS/crypto work; it does not prove remote lock release or a DROP outcome. Ordinary callers exit naturally.
+
+`TestDatabaseRecoveryError` exposes only fixed safe diagnostics: `code`, `phase`, `outcome` and ordered `failures`. Preserve the whole failure list, including CLOSE_FAILED alongside any primary failure. `not-attempted` means the parent never granted DROP permission. It records `unknown` before attempting to send permission; send failure, cancellation or child death cannot establish that SQL did not run. Verified absence can establish a more precise outcome. `removed` and `already-absent` on an error retain the observed absence but do not mean cleanup succeeded. Keep earlier failures when recording a later successful retry. Raw server errors, connection details, names and OIDs are not attached to the public error.
+
+Each active normal invocation holds one extra base connection from before CREATE until target owners close, exact deletion is verified and the lease closes. The same session advisory lock covers setup, active use, clear and teardown. Cooperating recovery returns BUSY while that lease is held; different targets remain independent. Lease loss blocks new setup/clear/use. Cleanup retry reacquires the lock and revalidates saved identity before DDL. Target close failures retain cleanup state and the lease; a confirmed DROP followed by close failure also retains retry state.
+
+Advisory locks coordinate participating library processes. They cannot make catalog lookup plus name-based DROP atomic against outside DDL, and older library processes do not hold this lease. Local socket closure also does not prove immediate server lock release during a network partition. A retry that finds server-side contention returns BUSY; it never steals a lock. Plan capacity for the extra base session and always finish or retry normal teardown.
 
 ## Library verification
 
@@ -126,8 +234,8 @@ done
 docker exec "$verification_container" pg_isready -U postgres -d verification || exit 1
 verification_port=$(docker port "$verification_container" 5432/tcp | cut -d: -f2)
 export DATABASE_URL="postgres://postgres:local@127.0.0.1:$verification_port/verification"
-npm test -- --runInBand
 npm run build
+npm test -- --runInBand
 npm run lint
 # End this shell or run the owner-only shutdown explicitly:
 cleanup_verification
