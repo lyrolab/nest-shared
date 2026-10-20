@@ -97,7 +97,10 @@ export async function createTlsProxy(
   })
   const explicit = new URL(databaseUrl)
   explicit.hostname = "localhost"
-  explicit.port = String(server.address().port)
+  const address = server.address()
+  if (!address || typeof address === "string")
+    throw new Error("TLS fixture did not listen")
+  explicit.port = String(address.port)
   explicit.search = "?sslmode=verify-full"
   const normal = new URL(explicit)
   normal.searchParams.set("sslrootcert", certPath)
