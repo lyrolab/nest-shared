@@ -10,6 +10,24 @@ const {
   TestDatabaseSession,
 } = require("../../../dist/database/helpers/test-database-session")
 const scenarios = require("./transport-scenarios.json")
+let activeScenario = process.argv[3] ?? "initialization"
+
+function diagnostic(error) {
+  const scalar = (value) =>
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    ["DATABASE_FAILURE", "CANCELLED", "DEADLINE_EXCEEDED"].includes(value)
+      ? value
+      : undefined
+  return {
+    scenario: activeScenario,
+    line: Number(
+      error.line ?? error.stack?.match(/transport-runner\.cjs:(\d+)/)?.[1],
+    ),
+    actual: scalar(error.actual),
+    expected: scalar(error.expected),
+  }
+}
 
 const closeBudgetMs = 1000
 const gracefulMs = Math.floor(closeBudgetMs / 2)
@@ -185,7 +203,7 @@ async function configurationChild(scenario, port, certificateDir) {
       database,
       acquiredOid: 42,
       exclusiveTarget: true,
-      timeoutMs: scenario.mode === "cancel" ? 500 : 40,
+      timeoutMs: scenario.mode === "deadline" ? 40 : 500,
       closeTimeoutMs: 40,
       signal: controller.signal,
     })
@@ -198,16 +216,14 @@ async function configurationChild(scenario, port, certificateDir) {
     clearTimeout(abortTimer)
   }
   const elapsedMs = Math.ceil(performance.now() - started)
-  assert.equal(
-    failure,
-    scenario.file === "regular"
-      ? scenario.mode === "cancel"
-        ? "CANCELLED"
-        : "DEADLINE_EXCEEDED"
-      : "DATABASE_FAILURE",
-  )
+  const stopped = scenario.mode === "cancel" ? "CANCELLED" : "DEADLINE_EXCEEDED"
+  if (scenario.file === "regular") assert.equal(failure, stopped)
+  else if (scenario.mode === "refusal")
+    assert.equal(failure, "DATABASE_FAILURE")
+  else assert.ok(["DATABASE_FAILURE", stopped].includes(failure))
   assert.ok(elapsedMs < 250)
-  assert.equal(opened, 1)
+  if (failure === "DATABASE_FAILURE" || scenario.file === "regular")
+    assert.equal(opened, 1)
   assert.equal(closed, opened)
   assert.equal(reads, scenario.file === "regular" ? 1 : 0)
   assert.equal(settledReads, reads)
@@ -339,6 +355,18 @@ async function probe(scenario, certificateDir) {
       6000,
       "Child failed natural exit",
     )
+    if (code !== 0) {
+      try {
+        const childFailure = JSON.parse(stderr.trim())
+        const error = new Error("Fixture child failed")
+        error.actual = childFailure.actual
+        error.expected = childFailure.expected
+        error.line = childFailure.line
+        throw error
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error
+      }
+    }
     assert.equal(code, 0, `Failed child: ${scenario.name}`)
     assert.equal(signal, null)
     assert.equal(stderr, "")
@@ -430,6 +458,7 @@ async function main() {
       }),
     )
     for (const scenario of scenarios) {
+      activeScenario = scenario.name
       await probe(
         scenario,
         path.join(directory, scenario.mismatch ? "mismatch" : "valid"),
@@ -440,8 +469,8 @@ async function main() {
   }
 }
 
-main().catch(() => {
+main().catch((error) => {
   if (process.connected) process.disconnect()
-  console.error("Administration transport regression failed")
+  console.error(JSON.stringify(diagnostic(error)))
   process.exitCode = 1
 })

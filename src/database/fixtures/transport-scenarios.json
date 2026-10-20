@@ -146,5 +146,26 @@
     "file": "device",
     "key": "sslrootcert",
     "mode": "deadline"
+  },
+  {
+    "name": "config-fifo-sslrootcert-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "mode": "refusal"
+  },
+  {
+    "name": "config-fifo-sslcert-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "mode": "refusal"
+  },
+  {
+    "name": "config-fifo-sslkey-refusal",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslkey",
+    "mode": "refusal"
   }
 ]

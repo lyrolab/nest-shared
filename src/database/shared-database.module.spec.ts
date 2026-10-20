@@ -1076,7 +1076,13 @@ describe("retained test database recovery public contract", () => {
             unhandled: number
           },
       )
-    expect(reports).toHaveLength(23)
+    const scenarios = JSON.parse(
+      readFileSync(
+        join(__dirname, "fixtures/transport-scenarios.json"),
+        "utf8",
+      ),
+    ) as unknown[]
+    expect(reports).toHaveLength(scenarios.length)
     for (const report of reports) {
       expect(report.naturalExitBeforeFixtureCleanup).toBe(true)
       expect(report.exitCode).toBe(0)

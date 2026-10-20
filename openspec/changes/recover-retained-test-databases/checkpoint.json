@@ -3,6 +3,12 @@
   "remaining": "Apply rework complete: 20/20 tasks. Next owner: Simplifier after final-head CI succeeds, preserving this issue, branch and PR. Final-head CI is read again and recorded in the issue handoff. After reviewed merge, Reviewer returns the open issue to Founding Engineer for actual release verification; no released version or consumer readiness is claimed.",
   "verification": [
     {
+      "command": "TMPDIR=<run scratch> node_modules/.bin/jest src/database/shared-database.module.spec.ts --runInBand --silent; two concurrent transport-runner.cjs invocations with Python os.sched_setaffinity restricting both to one allowed CPU",
+      "result": "Pass: final focused unit runner 100/100 tests, 32.305 seconds. Each one-CPU stress child runner passes all 26 transport/configuration cases and exits naturally. A prior one-CPU probe reproduced safe CANCELLED beating FIFO validation while the fixture incorrectly required DATABASE_FAILURE. Tight deadline/cancellation cases accept whichever safe refusal wins and still require no late dispatch, every opened file closed and every started read settled. Three separate FIFO refusal cases require DATABASE_FAILURE without interruption. Diagnostics expose only scenario, source line and safe scalar assertions, with no raw error/identity/connection fields. Scenario counts come from the data file.",
+      "testedInput": "Final database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: f58f2e90ba0e6f633654b3be245b568033fd9f4ca7967feb782113ef08f1435d. Production source/dependencies/native fixtures match c6c4e2ebf04eb61a82566ddf50d134c339a74378; only transport runner/data, unit assertions and OpenSpec metadata differ. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1.",
+      "invalidatedBy": "Transport/configuration runner/data, unit assertions, dependencies, runtime, filesystem interfaces or compiler/test configuration change."
+    },
+    {
       "command": "npm ci --prefer-offline --no-audit; npm run build",
       "result": "Pass: clean locked install of 1522 packages including @types/pg 8.23.1, prepare/build and separate whole build. Contextually typed configuration preserves the sslnegotiation literal union. Public declarations build; database fixtures are excluded from dist.",
       "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
@@ -10,7 +16,7 @@
     },
     {
       "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand --json --outputFile=<run scratch>/rework-results.json",
-      "result": "Pass: 398/398 tests, 34/34 suites, no skips; 384.107 seconds. Includes 46 native public-package cases (295.305-second suite), 100 database unit cases and 3 CLI cases. Native creator/recovery processes, ownership/refusal/sibling sentinels, lifecycle barriers, concurrency, cancellation/deadlines, lease loss/retry and uncertainty regressions pass. Unit coverage includes 23 transport/configuration scenarios and public declaration smoke. Other production/auth/AI regressions pass. Owned PostgreSQL 16 container removed after success.",
+      "result": "Pass: 398/398 tests, 34/34 suites, no skips; 384.107 seconds. Includes 46 native public-package cases (295.305-second suite), 100 database unit cases and 3 CLI cases. Native creator/recovery processes, ownership/refusal/sibling sentinels, lifecycle barriers, concurrency, cancellation/deadlines, lease loss/retry and uncertainty regressions pass. Unit coverage includes 23 transport/configuration scenarios and public declaration smoke. Other production/auth/AI regressions pass. Owned PostgreSQL 16 container removed after success. Native and other-suite evidence remains valid after the transport-only fixture edits; the affected unit suite is rerun on the final inputs above.",
       "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
       "invalidatedBy": "Source/tests/fixtures, dependencies, runtime/server, compiler/Jest configuration or native prerequisites change."
     },
@@ -25,6 +31,12 @@
       "result": "Pass: full read-only lint, formatting, strict OpenSpec validation and diff checks. Hooks run on each commit. Final metadata formatting/validation and disclosure scan run again before publication.",
       "testedInput": "c6c4e2ebf04eb61a82566ddf50d134c339a74378; database/manifests/compiler/test-workflow SHA-256 with sorted filename/content NUL framing: 8462411f8b939d48d13a181124007a3d1faf3d4f5044714aee9fc3a42720c66b. Node 24.13.0, pg 8.23.1, @types/pg 8.23.1, @types/node 22.14.0, TypeScript 5.8.3. Final task/checkpoint edits change metadata only.",
       "invalidatedBy": "Checked files, dependencies or lint/formatter/OpenSpec configuration change."
+    },
+    {
+      "command": "gh run view 39377840285 --log-failed; one-CPU concurrent transport probe",
+      "result": "Metadata-head CI exposed one test-only timing failure: 397 passed, 1 aggregate transport test failed. Both clean install and public build passed. One-CPU diagnostic probe reproduced CANCELLED versus expected DATABASE_FAILURE for a FIFO; updated scenario assertions and separate refusal coverage pass the final focused/stress checks. Do not reuse this failed run as final-head success; final-head checks are reread before handoff.",
+      "testedInput": "f3c15d14a9e1d3ef57418bb8c4fc84250efd715d; diagnostic-only and final transport corrections are covered above.",
+      "invalidatedBy": "This is failure evidence, not a passing acceptance claim."
     },
     {
       "command": "gh pr view 16 --json headRefOid,statusCheckRollup",
