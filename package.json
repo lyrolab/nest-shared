@@ -283,5 +283,8 @@
     "*.{js,ts}": [
       "eslint --fix"
     ]
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

@@ -131,7 +131,7 @@ if (require.main === module) module.exports().catch(() => { console.error("Packe
   )
   fs.writeFileSync(
     path.join(directory, "public.test.cjs"),
-    `test("packed public API owns its private child", require("./probe.cjs"), 15000)\n`,
+    `test("packed public API owns its private child", () => require("./probe.cjs")(), 15000)\n`,
   )
   fs.writeFileSync(
     path.join(directory, "jest.config.cjs"),
@@ -177,7 +177,12 @@ if (require.main === module) module.exports().catch(() => { console.error("Packe
   )
 }
 main()
-  .catch(() => {
+  .catch((error) => {
+    fs.writeFileSync(
+      path.join(scratch, "packed-main-failure.log"),
+      String(error.stack),
+      { mode: 0o600 },
+    )
     console.error("Packed package compatibility failed")
     process.exitCode = 1
   })
