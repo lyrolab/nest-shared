@@ -11,6 +11,7 @@ npm install @nestjs/cache-manager @keyv/redis
 ## Features
 
 - Redis-based caching
+- Keys prefixed with `REDIS_KEY_PREFIX`
 - Automatic test environment configuration
 - Configurable TTL (Time To Live)
 - Global cache instance
@@ -66,9 +67,11 @@ The cache module supports the following configuration:
 
 - Uses REDIS_URL from ConfigService
 - Configurable TTL via CACHE_TTL environment variable
+- Uses `REDIS_KEY_PREFIX` as the cache namespace, so every key, including the AI response cache, is stored as `<REDIS_KEY_PREFIX>:<key>`
 
 ## Environment Variables
 
 - `REDIS_URL`: Required for production environment
-- `CACHE_TTL`: Cache time-to-live in seconds
+- `REDIS_KEY_PREFIX`: Optional namespace prepended to every cache key
+- `CACHE_TTL`: Default cache time-to-live in seconds, used when a write passes no TTL
 - `NODE_ENV`: Set to 'test' for test environment configuration

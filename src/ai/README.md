@@ -11,7 +11,8 @@ npm install ai@^7 @ai-sdk/provider@^4 @openrouter/ai-sdk-provider@^3
 ## Features
 
 - OpenRouter integration with Google's Gemini model
-- Automatic response caching
+- Bounded, model-scoped response caching with a hit marker
+- OpenRouter embedding models
 - Type-safe AI model interactions
 - Configurable model selection
 
@@ -66,6 +67,21 @@ const model = this.aiService.wrapModel(anthropic("claude-sonnet-5"))
 
 `model`, `buildModel()` and `wrapModel()` return a `LanguageModelV4`.
 
+4. Build an OpenRouter embedding model:
+
+```typescript
+import { embed } from "ai"
+
+const { embedding } = await embed({
+  model: this.aiService.buildEmbeddingModel({
+    model: "openai/text-embedding-3-small",
+  }),
+  value: "text to embed",
+})
+```
+
+`buildEmbeddingModel({ model?, settings? })` returns an `EmbeddingModelV4`. `settings` is passed through as `OpenRouterEmbeddingSettings`. Embeddings are not cached.
+
 The package is CommonJS; `ai` v7 is ESM-only and is loaded through Node's `require(esm)` support (Node >= 22).
 
 ## Configuration
@@ -73,14 +89,28 @@ The package is CommonJS; `ai` v7 is ESM-only and is loaded through Node's `requi
 The AI module is configured explicitly through module options:
 
 - `apiKey` (required): OpenRouter API key used for authentication
-- `defaultModel` (optional): fallback model used by `AiService.model`
+- `defaultModel` (optional): fallback model used by `AiService.model` and `buildModel()`. Defaults to `google/gemini-2.0-flash-001`
+- `defaultEmbeddingModel` (optional): fallback model used by `buildEmbeddingModel()`. Defaults to `openai/text-embedding-3-small`
 - `cacheTtlMs` (optional): per-entry cache TTL in milliseconds for AI responses
+  - `undefined`: 24 hours
+  - `0`: cache disabled, no read and no write
+  - negative: `AiService` throws at construction
 
-The module configures:
+Every cache write carries a positive TTL, so no AI response is stored without expiry.
 
-- Response caching using the shared cache module
-- Default model selection (Google Gemini 2.0 Flash)
-- Type-safe model interactions
+## Response cache
+
+`wrapGenerate` results of every model built by `model`, `buildModel()` or `wrapModel()` are cached through the shared cache module. Streams are not cached.
+
+The cache key is:
+
+```
+ai:v2:<provider>/<modelId>:<sha256(JSON.stringify(params))>
+```
+
+`provider` and `modelId` come from the wrapped model, so two models given the same prompt never share an entry, and the key does not reveal the prompt. When `REDIS_KEY_PREFIX` is set, the stored Redis key is `<REDIS_KEY_PREFIX>:ai:v2:...`.
+
+A result replayed from the cache carries `providerMetadata.aiCache = { hit: true }`, merged with the stored provider metadata. A middleware wrapped outside the AI service model can use it to tell a replay, which costs nothing, from a billed call. The stored entry never carries the marker, and a fresh result has no `aiCache` key.
 
 You can also configure it asynchronously:
 

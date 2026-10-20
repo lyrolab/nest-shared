@@ -18,6 +18,7 @@ export class SharedCacheModule {
             configService: ConfigService,
             redisConfig: RedisConfig,
           ) => ({
+            namespace: redisConfig.keyPrefix,
             ttl: configService.get("CACHE_TTL")
               ? +configService.get("CACHE_TTL") * 1000
               : undefined,
