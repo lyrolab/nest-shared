@@ -203,5 +203,83 @@
     "code": "DATABASE_FAILURE",
     "outcome": "not-attempted",
     "forced": true
+  },
+  {
+    "name": "pem-dns",
+    "tls": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-ip",
+    "tls": true,
+    "ip": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-mutual",
+    "tls": true,
+    "mutual": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-capture",
+    "tls": true,
+    "mutation": true,
+    "status": "removed"
+  },
+  {
+    "name": "pem-unknown-ca",
+    "tls": true,
+    "untrusted": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-wrong-dns",
+    "tls": true,
+    "mismatch": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-wrong-ip",
+    "tls": true,
+    "mismatch": true,
+    "ip": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-malformed",
+    "tls": true,
+    "malformed": true,
+    "code": "INVALID_INPUT",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-mismatched-key",
+    "tls": true,
+    "keyMismatch": true,
+    "code": "INVALID_INPUT",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-active",
+    "tls": true,
+    "activeStall": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-handshake",
+    "tls": true,
+    "handshakeStall": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "explicit-empty-password",
+    "emptyPassword": true,
+    "status": "removed"
   }
 ]

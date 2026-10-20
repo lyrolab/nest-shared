@@ -4,6 +4,8 @@ const childProcess = require("node:child_process")
 const path = require("node:path")
 const net = require("node:net")
 const crypto = require("node:crypto")
+const tls = require("node:tls")
+const fs = require("node:fs")
 const scenarios = [
   ...require("./isolation-scenarios.json"),
   ...require("./recovery-fault-scenarios.json"),
@@ -72,6 +74,8 @@ function acquisitionFixture() {
 
 function childFixture() {
   if (scenario.acquisition) return acquisitionFixture()
+  if (scenario.tls || scenario.emptyPassword)
+    return require("../../../dist/database/internal/test-database-recovery-child.js")
   if (scenario.noReady) {
     setInterval(() => {}, 1000)
     return
@@ -203,9 +207,55 @@ async function caller() {
     queries = 0,
     backpressure = false
   const peers = new Set()
-  let server
+  let server,
+    directory,
+    material,
+    secure = false,
+    clientVerified = false,
+    passwordObserved = false
+  let connections = 0
   let port = 5432
-  if (scenario.acquisition) {
+  if (scenario.tls) {
+    directory = fs.mkdtempSync(
+      path.join(
+        process.env.PAPERCLIP_RUN_SCRATCH_DIR ?? require("node:os").tmpdir(),
+        "recovery-tls-",
+      ),
+    )
+    const certificate = (prefix, mismatch) => {
+      childProcess.execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "rsa:2048",
+          "-nodes",
+          "-days",
+          "1",
+          "-keyout",
+          path.join(directory, prefix + ".key"),
+          "-out",
+          path.join(directory, prefix + ".crt"),
+          "-subj",
+          "/CN=localhost",
+          "-addext",
+          mismatch
+            ? "subjectAltName=DNS:wrong.invalid"
+            : "subjectAltName=DNS:localhost,IP:127.0.0.1",
+        ],
+        { stdio: "ignore", timeout: 10000 },
+      )
+      return {
+        cert: fs.readFileSync(path.join(directory, prefix + ".crt"), "utf8"),
+        key: fs.readFileSync(path.join(directory, prefix + ".key"), "utf8"),
+      }
+    }
+    material = certificate("server", scenario.mismatch)
+    if (scenario.untrusted || scenario.keyMismatch)
+      material.other = certificate("other", false)
+  }
+  if (scenario.acquisition || scenario.tls || scenario.emptyPassword) {
     const auth = (code, text) => {
       const body = Buffer.from(text),
         header = Buffer.alloc(9)
@@ -214,33 +264,205 @@ async function caller() {
       header.writeInt32BE(code, 5)
       return Buffer.concat([header, body])
     }
-    server = net.createServer((socket) => {
-      peers.add(socket)
-      socket.on("error", () => {})
-      socket.on("close", () => peers.delete(socket))
+    const packet = (type, body) => {
+      const header = Buffer.alloc(5)
+      header[0] = type.charCodeAt(0)
+      header.writeInt32BE(body.length + 4, 1)
+      return Buffer.concat([header, body])
+    }
+    const ready = Buffer.from([82, 0, 0, 0, 8, 0, 0, 0, 0, 90, 0, 0, 0, 5, 73])
+    const reply = (socket, rows) => {
+      if (rows.length) {
+        const keys = Object.keys(rows[0]),
+          count = Buffer.alloc(2)
+        count.writeInt16BE(keys.length)
+        socket.write(
+          packet(
+            "T",
+            Buffer.concat([
+              count,
+              ...keys.map((key) => {
+                const field = Buffer.alloc(18),
+                  value = rows[0][key]
+                field.writeInt32BE(
+                  typeof value === "boolean"
+                    ? 16
+                    : typeof value === "number"
+                      ? 23
+                      : 25,
+                  6,
+                )
+                field.writeInt16BE(-1, 10)
+                field.writeInt32BE(-1, 12)
+                return Buffer.concat([Buffer.from(key + "\0"), field])
+              }),
+            ]),
+          ),
+        )
+        for (const row of rows)
+          socket.write(
+            packet(
+              "D",
+              Buffer.concat([
+                count,
+                ...keys.map((key) => {
+                  const value = Buffer.from(
+                    typeof row[key] === "boolean"
+                      ? row[key]
+                        ? "t"
+                        : "f"
+                      : String(row[key]),
+                  )
+                  const size = Buffer.alloc(4)
+                  size.writeInt32BE(value.length)
+                  return Buffer.concat([size, value])
+                }),
+              ]),
+            ),
+          )
+      }
+      socket.write(packet("C", Buffer.from("SELECT 1\0")))
+      socket.write(Buffer.from([90, 0, 0, 0, 5, 73]))
+    }
+    const protocol = (socket) => {
       let startup = true,
         pending = Buffer.alloc(0),
-        first = true
+        first = true,
+        dropped = false,
+        prepared = ""
       socket.on("data", (chunk) => {
         pending = Buffer.concat([pending, chunk])
         while (pending.length >= (startup ? 4 : 5)) {
           const size = pending.readInt32BE(startup ? 0 : 1) + (startup ? 0 : 1)
           if (pending.length < size) return
-          const packet = pending.subarray(0, size)
+          const data = pending.subarray(0, size)
           pending = pending.subarray(size)
           if (startup) {
             startup = false
-            socket.write(auth(10, "SCRAM-SHA-256\0\0"))
-          } else if (packet[0] === 112 && first) {
+            if (scenario.emptyPassword) socket.write(auth(3, ""))
+            else if (scenario.acquisition)
+              socket.write(auth(10, "SCRAM-SHA-256\0\0"))
+            else socket.write(ready)
+          } else if (data[0] === 112 && first) {
             first = false
-            const offset = packet.indexOf(0, 5) + 5
-            const nonce = packet
-              .subarray(offset)
-              .toString()
-              .match(/r=([^,]+)/)[1]
-            socket.write(auth(11, `r=${nonce}fixture,s=Zml4dHVyZQ==,i=4096`))
-          } else if (packet[0] === 81) queries++
+            if (scenario.emptyPassword) {
+              assert.deepEqual(data.subarray(5), Buffer.from([0]))
+              passwordObserved = true
+              socket.write(ready)
+            } else {
+              const offset = data.indexOf(0, 5) + 5
+              const nonce = data
+                .subarray(offset)
+                .toString()
+                .match(/r=([^,]+)/)[1]
+              socket.write(auth(11, `r=${nonce}fixture,s=Zml4dHVyZQ==,i=4096`))
+            }
+          } else if (data[0] === 81) {
+            queries++
+            const sql = data.subarray(5, -1).toString()
+            if (scenario.activeStall) continue
+            if (sql.includes("current_database() AS name"))
+              reply(socket, [
+                {
+                  name: "base",
+                  session: "fixture",
+                  current: "fixture",
+                  role: 7,
+                  template: false,
+                },
+              ])
+            else if (sql.includes("pg_try_advisory_lock"))
+              reply(socket, [{ locked: true }])
+            else if (sql.includes("WHERE datname = $1 OR oid"))
+              reply(
+                socket,
+                dropped || scenario.absent
+                  ? []
+                  : [
+                      {
+                        oid: 42,
+                        name: database.databaseName,
+                        owner: 7,
+                        template: false,
+                      },
+                    ],
+              )
+            else if (sql.startsWith("DROP")) {
+              assert.ok(trace.includes("parent:permit-drop"))
+              dropped = true
+              reply(socket, [])
+            } else reply(socket, [])
+          } else if (data[0] === 88) socket.end()
+          else if (data[0] === 80) {
+            const offset = data.indexOf(0, 5) + 1
+            prepared = data.subarray(offset, data.indexOf(0, offset)).toString()
+            socket.write(packet("1", Buffer.alloc(0)))
+          } else if (data[0] === 66) socket.write(packet("2", Buffer.alloc(0)))
+          else if (data[0] === 68) socket.write(packet("n", Buffer.alloc(0)))
+          else if (data[0] === 69) {
+            queries++
+            if (!scenario.activeStall) {
+              if (prepared.includes("current_database() AS name"))
+                reply(socket, [
+                  {
+                    name: "base",
+                    session: "fixture",
+                    current: "fixture",
+                    role: 7,
+                    template: false,
+                  },
+                ])
+              else if (prepared.includes("pg_try_advisory_lock"))
+                reply(socket, [{ locked: true }])
+              else if (prepared.includes("WHERE datname = $1 OR oid"))
+                reply(
+                  socket,
+                  dropped || scenario.absent
+                    ? []
+                    : [
+                        {
+                          oid: 42,
+                          name: database.databaseName,
+                          owner: 7,
+                          template: false,
+                        },
+                      ],
+                )
+              else reply(socket, [])
+            }
+          }
         }
+      })
+    }
+    server = net.createServer((socket) => {
+      connections++
+      peers.add(socket)
+      socket.on("error", () => {})
+      socket.on("close", () => peers.delete(socket))
+      if (!scenario.tls) return protocol(socket)
+      socket.once("data", (request) => {
+        assert.equal(request.readInt32BE(4), 80877103)
+        socket.write("S")
+        if (scenario.handshakeStall) return
+        const encrypted = new tls.TLSSocket(socket, {
+          isServer: true,
+          secureContext: tls.createSecureContext({
+            cert: material.cert,
+            key: material.key,
+            ca: material.cert,
+          }),
+          requestCert: !!scenario.mutual,
+          rejectUnauthorized: !!scenario.mutual,
+        })
+        encrypted.on("error", () => {})
+        encrypted.on("secure", () => {
+          secure = true
+          if (scenario.mutual) {
+            clientVerified = encrypted.authorized
+            assert.equal(clientVerified, true)
+          }
+        })
+        protocol(encrypted)
       })
     })
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -319,7 +541,22 @@ async function caller() {
     recoverTestDatabase,
     TestDatabaseRecoveryError,
   } = require("@lyrolab/nest-shared/database")
-  const databaseUrl = `postgres://fixture:fixture@${scenario.acquisition === "dns" ? "localhost" : "127.0.0.1"}:${port}/base`
+  const databaseUrl = `postgres://fixture:${scenario.emptyPassword ? "" : "fixture"}@${scenario.acquisition === "dns" || (scenario.tls && !scenario.ip) ? "localhost" : "127.0.0.1"}:${port}/base`
+  const tlsInput = scenario.tls
+    ? {
+        caPem: scenario.untrusted
+          ? material.other.cert
+          : scenario.malformed
+            ? "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"
+            : material.cert,
+        ...(scenario.mutual || scenario.keyMismatch
+          ? {
+              certPem: material.cert,
+              keyPem: scenario.keyMismatch ? material.other.key : material.key,
+            }
+          : {}),
+      }
+    : undefined
   const database = Database.getTestDatabaseInfo(
     new ConfigService({ DATABASE_URL: databaseUrl }),
   )
@@ -333,10 +570,11 @@ async function caller() {
         : 2000
   const started = performance.now()
   try {
-    const result = await recoverTestDatabase({
+    const recovering = recoverTestDatabase({
       base: {
         databaseUrl,
         expectedRole: "fixture",
+        ...(tlsInput ? { tls: tlsInput } : {}),
         ...(scenario.backpressure
           ? {
               tls: {
@@ -355,6 +593,12 @@ async function caller() {
       closeTimeoutMs: 400,
       signal: controller.signal,
     })
+    if (scenario.mutation) {
+      tlsInput.caPem = "changed"
+      tlsInput.certPem = "changed"
+      tlsInput.keyPem = "changed"
+    }
+    const result = await recovering
     assert.equal(scenario.code, undefined)
     assert.equal(result.status, scenario.status)
   } catch (error) {
@@ -390,12 +634,27 @@ async function caller() {
     assert.ok(!trace.includes("parent:permit-drop"))
     if (scenario.acquisition === "scram") assert.equal(peers.size, 0)
   }
+  if (scenario.tls) {
+    if (scenario.malformed || scenario.keyMismatch) assert.equal(connections, 0)
+    else if (scenario.untrusted || scenario.mismatch || scenario.handshakeStall)
+      assert.equal(queries, 0)
+    else {
+      assert.equal(secure, true)
+      assert.ok(queries > 0)
+    }
+    if (scenario.mutual) assert.equal(clientVerified, true)
+  }
+  if (scenario.emptyPassword) {
+    assert.equal(passwordObserved, true)
+    assert.ok(queries > 0)
+  }
   if (scenario.backpressure) assert.equal(backpressure, true)
   if (scenario.earlyCancel || scenario.noReady)
     assert.ok(!trace.includes("parent:start"))
   await jobs
   for (const peer of peers) peer.destroy()
   if (server) await new Promise((resolve) => server.close(resolve))
+  if (directory) fs.rmSync(directory, { recursive: true, force: true })
   console.log(
     JSON.stringify({
       name: scenario.name,
