@@ -7,7 +7,7 @@ A process that exits before test teardown can leave its disposable database behi
 - Export a stateless `recoverTestDatabase` function from `@lyrolab/nest-shared/database`. Require original `TestDatabaseInfo`, the positive acquired PostgreSQL OID, independently supplied base connection configuration, and an explicit exclusive-target assertion.
 - Share the existing name derivation with setup. Validate the original identity, actual base and role, exact OID and direct owner before ordinary DROP. Return `removed` or `already-absent` only after confirmed absence and successful connection closure.
 - Coordinate recovery and normal test lifecycle operations with a session advisory lock held on the base database. Document the caller's exclusive disposable-target prerequisite and the limits against outside DDL.
-- Bound recovery connection, queries, DROP and close; honor cancellation and retain uncertain outcomes and every close failure in safe structured errors.
+- Bound recovery connection, queries, DROP and close with a privately owned Node socket supplied through the public pg stream factory. Preserve pg TLS/certificate checks, reserve time for forced disposal, honor cancellation and retain uncertain outcomes and every close failure in safe structured errors.
 - Prove the public API on native PostgreSQL with separate creator and recovery processes, refusal cases, lifecycle races, partial failures and natural exits. Keep normal setup/reset, migration and production-configuration regressions.
 - Document acquisition, restricted evidence storage, recovery and retry. Keep saved `TestDatabaseInfo` plus observed OID usable without an extra ownership token. Incomplete records cannot authorize cleanup.
 
@@ -24,7 +24,7 @@ None. Normal test setup and teardown retain their public behavior; their interna
 ## Impact
 
 - `src/database/`: public recovery function/types/error, shared private naming and administration helpers, lifecycle integration, barrel exports, README and colocated tests/fixtures. No new Nest module or parallel test composition.
-- `package.json` and lockfile: declare the PostgreSQL driver used directly by the bounded administration path as an optional peer, retaining the development driver; add its development types as needed. Other module users need no PostgreSQL driver.
+- `package.json` and lockfile: declare `pg: "^8.23.1"` as an optional peer for the verified factory/TLS administration path, retaining the development driver; add its development types as needed. Other module users need no PostgreSQL driver.
 - `.github/workflows/test.yml`: retain the owned PostgreSQL 16 service and make native recovery coverage mandatory in CI. `.github/workflows/release.yml` and semantic-release remain the publication path.
 - Sensitive surfaces: database ownership/deletion/lifecycle, migrated test fixtures, isolated restore and a public library API. Reviewer must verify production database configuration/migrations, auth/JWT/session and LLM prompt/token contracts remain intact.
 - Out of scope: consumer journals/archive cleanup, application adoption, database sweeps, fixture creation during recovery, production schema changes, deployment, credentials, manual publication and readiness claims.

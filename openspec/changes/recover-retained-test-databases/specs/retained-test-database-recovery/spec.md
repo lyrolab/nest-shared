@@ -105,6 +105,36 @@ Recovery SHALL bound all work with timeoutMs and mandatory close with closeTimeo
 - **THEN** the error retains both ordered safe failure entries and exits without unhandled promises
 - **AND** confirmed absence followed by close failure still rejects with the observed outcome retained
 
+### Requirement: Owned administration transport and preserved TLS
+
+The private administration helper SHALL create and retain its own Node socket and pass it through the public pg Client stream factory, with optional peer `pg: "^8.23.1"`. It SHALL preserve pg SSLRequest negotiation and configured certificate/hostname verification. It SHALL refuse unverified transport/negotiation settings without altering production configuration. It SHALL never retrieve driver-private transports, patch pg, send a dummy query to alter shutdown, unref as cleanup, or require caller process exit.
+
+#### Scenario: Idle peer withholds shutdown
+
+- **WHEN** a plaintext or established TLS peer withholds final shutdown beyond the graceful half of closeTimeoutMs
+- **THEN** the helper records CLOSE_FAILED and destroys its retained owned socket within the same close budget
+- **AND** it observes local close, public Client end and all started promise settlements, clears timers/listeners and exits naturally
+- **AND** successful forced disposal cannot convert the graceful failure into success or erase an uncertain DROP outcome
+
+#### Scenario: Connect or active work is interrupted
+
+- **WHEN** abort/deadline interrupts connect, TLS negotiation, authentication or an active query
+- **THEN** dispatch stops synchronously and the owned transport is disposed without waiting for graceful shutdown
+- **AND** connect/query/end failures are observed, including the fixed local interruption error needed to settle unfinished connect
+- **AND** no late readiness or queued continuation can issue another query, and natural exit needs no parent fixture cleanup
+
+#### Scenario: Certificate validation fails
+
+- **WHEN** a peer presents an untrusted certificate or a trusted certificate for the wrong DNS name or IP
+- **THEN** pg rejects connection without disabling certificate verification or dispatching recovery work
+- **AND** cleanup settles within budget and the caller exits naturally, while valid trusted DNS/IP certificates remain usable
+
+#### Scenario: Disposal cannot be confirmed or remote lock remains
+
+- **WHEN** local closure or pending-operation settlement cannot be confirmed within the reserved close budget
+- **THEN** recovery retains CLOSE_FAILED with any primary failure and never reports success
+- **AND** a locally closed lease is unusable, but retry must still acquire the server lock and cannot assume immediate remote lock release
+
 ### Requirement: Native public-package proof and consumable release
 
 The change SHALL include mandatory native PostgreSQL CI coverage using real creator and fresh recovery processes, public compiled-subpath imports and declarations. It SHALL preserve normal setup/reset, migration and production/CLI regressions, document acquisition/recovery/compatibility, and release through the existing reviewed semantic-release workflow. Completion SHALL require verified actual publication, consumer-visible API/recipe and immutable PR/commit evidence.

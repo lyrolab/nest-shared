@@ -1,52 +1,132 @@
-# Driver close prerequisite
+# Administration transport prerequisite
 
-Implementation is blocked on design decision 5: an idle `pg.Client.end()` can
-leave a connection open beyond the close budget. A timeout around that promise
-reports failure but does not close the connection or let the caller exit naturally.
-The design requires returning this mismatch to Founding Engineer before implementing
-an alternative transport or weakening the guarantee. No implementation task is
-complete.
+The administration helper owns a Node socket supplied through pg's public Client
+stream factory. It can dispose that socket when a peer stalls, while pg retains
+responsibility for TLS negotiation and certificate checks. The transport proof
+passes with pg 8.23.1 and Node 24.13.0. Implementation tasks remain unchecked;
+this is injected transport evidence, not native PostgreSQL recovery acceptance.
 
-Run the injected transport probe with the repository's locked dependencies:
+## Run
+
+Use locked repository dependencies, Node and OpenSSL. Set
+`PAPERCLIP_RUN_SCRATCH_DIR` or `PAPERCLIP_SCRATCH_DIR` to a writable run-owned scratch
+directory. The owned-stream runner creates short-lived self-signed fixture
+certificates there and removes them in finally. It needs no database, external
+service, credentials or installed consumer package.
 
 ```sh
 node openspec/changes/recover-retained-test-databases/verification/pg-close-probe.cjs
+node openspec/changes/recover-retained-test-databases/verification/owned-stream-probe.cjs
+node --check openspec/changes/recover-retained-test-databases/verification/owned-stream-probe.cjs
 ```
 
-The runner starts two ordinary Node children against its own loopback protocol
-fixture. It sends only AuthenticationOk and ReadyForQuery, then withholds the
-peer's final close. It uses public Client configuration, connect, query, end and
-error events. It never accesses a client socket or private driver state. The
-parent observes child exits, then destroys only its own server-side sockets to
-clean up. It does not force a successful child exit.
+`transport-scenarios.json` supplies the cases to one runner. Each case gets its own
+ordinary Node child and parent-owned loopback fixture. The child retains its own
+`net.Socket`, supplies `stream: () => ownedSocket`, and uses only public Client
+connect/query/end/error/end interfaces and Node socket APIs. It never reads back
+the driver's socket, patches pg, sends a dummy query, calls unref/process.exit, or
+runs detached cleanup. The IPC channel synchronizes the stalled phase and is
+explicitly disconnected after transport disposal; the parent then observes
+natural child exit before closing any fixture peer.
 
-Observed with locked pg 8.23.1 and Node 24.13.0:
+The fixture speaks only enough PostgreSQL protocol for startup, AuthenticationOk,
+ReadyForQuery and query observation. TLS cases use a real Node TLS server after
+SSLRequest, with certificate validation enabled in the real pg client. Its peers
+keep their writable side open during graceful shutdown. Active cases withhold the
+query response. Interrupted startup cases schedule late readiness; the parent
+counts query packets and fails on any unexpected dispatch. No DROP is sent.
 
-| Injected scenario                           | First end within 100 ms | Repeated end within 100 ms | Natural exit before fixture cleanup |
-| ------------------------------------------- | ----------------------- | -------------------------- | ----------------------------------- |
-| Active query with no response               | Yes                     | Yes                        | Yes                                 |
-| Idle connection, peer withholds final close | No                      | No                         | No                                  |
+The close budget is 1,000 ms: 500 ms for graceful close and 500 ms reserved for
+forced disposal/confirmation. Interruption is triggered 100 ms after the fixture
+confirms its phase, with pg's own 4,000 ms connection/query timeout deliberately
+longer. Each case requires owned-socket close, public Client end and settlement of
+all connect/query/end promises before report, no unhandled rejection, empty child
+stderr and natural exit code 0 before fixture cleanup. Expected connection/query
+failures are asserted inside the probe, so code 0 means that proof passed.
+Certificates, keys, ports and raw failure details are never printed. Each child
+has a 6-second parent watchdog that fails the probe before killing only that child;
+fixture cleanup is bounded separately. Certificate generation has a 10-second
+subprocess limit. These watchdogs never establish a passing shutdown result.
 
-Both children exit with code 0 after fixture cleanup. The idle child remains alive
-for the additional 200 ms exit-observation window before cleanup. The test asserts
-these outcomes and returns nonzero if they differ. It sets connection, query,
-statement and lock timeouts to 100 ms; these do not bound idle shutdown.
+## Observed results
 
-In the installed driver, `Client.end` destroys the transport for an active query,
-but calls graceful `Connection.end` for an idle connection. That path sends
-Terminate and ends the writable side; the Client promise waits for the transport
-close event. The connection timeout is cleared when connection setup completes.
-Calling end again repeats graceful shutdown. Source locations are
-`node_modules/pg/lib/client.js` (`end`) and
-`node_modules/pg/lib/connection.js` (`end` and the stream close listener).
+Both commands above passed on 2026-10-20 with locked pg 8.23.1 and Node 24.13.0.
+The original `pg-close-probe.cjs` remains a control: active-query end settles within
+100 ms and exits naturally; idle end and repeated end both exceed 100 ms and the
+child stays alive through another 200 ms observation window. Only that negative
+control needs parent peer cleanup before exit. This isolates the unsupported
+assumption that idle `client.end()` alone bounds disposal.
 
-This is injected protocol/transport evidence, not native PostgreSQL recovery
-acceptance. No disposable database, role, recovery API or public package declaration
-has been created or verified. Production code, existing lifecycle behavior and the
-release workflow are untouched.
+The owned-stream proof passes all 13 cases:
 
-Founding Engineer must route a concrete design correction for bounded idle
-transport disposal through supported public interfaces, including TLS and natural
-failure exits. A promise timeout or client unref alone cannot establish closure.
-Keep the required exact ownership, uncertainty, close-failure reporting and ordinary
-fresh-process behavior. Then return this same issue, branch and PR to Applier.
+| Scenario                                  | Close observed | Forced fallback / CLOSE_FAILED | Natural exit before fixture cleanup |
+| ----------------------------------------- | -------------- | ------------------------------ | ----------------------------------- |
+| Plaintext idle stall                      | 503 ms         | Yes / yes                      | Yes                                 |
+| Plaintext active query stall              | 2 ms           | No / no                        | Yes                                 |
+| Plaintext connect/auth interruption       | 3 ms           | No / no                        | Yes                                 |
+| Stalled TLS negotiation interruption      | 5 ms           | No / no                        | Yes                                 |
+| Established TLS connect/auth interruption | 8 ms           | No / no                        | Yes                                 |
+| Established TLS idle stall                | 505 ms         | Yes / yes                      | Yes                                 |
+| Established TLS active query stall        | 3 ms           | No / no                        | Yes                                 |
+| Untrusted TLS certificate                 | 2 ms           | No / no                        | Yes                                 |
+| Trusted certificate for wrong DNS name    | 3 ms           | No / no                        | Yes                                 |
+| Trusted certificate for wrong IP          | 2 ms           | No / no                        | Yes                                 |
+| Plaintext active query interruption       | 4 ms           | No / no                        | Yes                                 |
+| Established TLS active query interruption | 6 ms           | No / no                        | Yes                                 |
+| Trusted TLS IP, idle stall                | 504 ms         | Yes / yes                      | Yes                                 |
+
+All 13 children exit with code 0, with all started operations settled and zero
+unhandled rejections. Only the four active cases send one SELECT each; every
+other case sends zero queries. The fixture confirms a completed TLS handshake for
+all established TLS cases. Untrusted certificates and trusted DNS/IP mismatches
+reject with the expected Node TLS error classifications. Both trusted localhost
+and trusted IP certificates connect successfully.
+
+In the TLS idle cases, the retained raw socket is destroyed after the graceful
+interval; the probe then observes public Client end, local socket close, pending
+promise settlement and natural child exit while the server fixture remains open.
+This proves disposal through pg's TLS wrapping for the tested implementation;
+it does not infer closure from the raw socket's `destroyed` flag. Active and
+handshake interruptions also destroy the retained socket immediately and settle
+naturally. A fixed local error on interrupted connect ensures its promise rejects;
+silent destruction combined with Client's ending state can leave it pending.
+Error observers remain installed through disposal.
+
+The probe's `closeFailed` flag retains the missed graceful deadline even when
+forced disposal succeeds. It is a transport observation, not an implemented
+TestDatabaseRecoveryError. Applier must verify ordered primary/CLOSE_FAILED errors,
+conservative DROP outcomes and public cancellation through the implemented API.
+
+## Supported boundary and implementation work
+
+Use optional peer `pg: "^8.23.1"`. The public factory predates this floor, but
+8.23.1 is the verified implementation for factory ownership, TLS wrapping and
+DNS/IP checks. Later compatible 8.x upgrades must keep these regressions passing;
+no lower version is claimed. Support Node TCP and pg's default PostgreSQL
+SSLRequest negotiation for this administration path. Direct TLS negotiation,
+custom caller streams, Unix sockets and alternate runtimes need separate proof
+before this API accepts them. Preserve production connection configuration.
+
+Public references: [stream-factory changelog](https://github.com/brianc/node-postgres/blob/pg%408.23.1/CHANGELOG.md),
+[8.23.1 connection implementation](https://github.com/brianc/node-postgres/blob/pg%408.23.1/packages/pg/lib/connection.js),
+[pg TLS options](https://node-postgres.com/features/ssl), and
+[Node socket.destroy](https://nodejs.org/docs/latest-v24.x/api/net.html#socketdestroyerror).
+
+Port these cases into the private helper/API regression runner before relying on
+them for production code. Explicit URL/base/role binding, parsed TLS settings,
+monotonic cancellation, lifecycle lease loss, deadlines and safe combined errors
+still need implementation verification. No native database, role, recovery API,
+package declaration or release is proved here. A local close also does not prove
+immediate remote advisory-lock release during a partition; retries must acquire
+the server lock normally. No task, ownership safeguard or release gate is waived.
+
+Evidence is invalidated by changes to the probe/data, pg lock/version, Node/TLS
+runtime or supported transport/negotiation. Re-run after those changes and verify
+the actual implementation separately. The following SHA-256 inputs identify this
+run (formatting changes require a fresh run):
+
+```text
+59f1ee6387d5dda4d0bb1fc9ee1c4c6de61b500cc814ce78c9d9bb9547206f30  owned-stream-probe.cjs
+7956618c6b89eb90e6895f0dc463c739b5317498658a6271aba33369f4b0504d  transport-scenarios.json
+4b8ed77e196eb925c2910ed2ae2045943ee356e85ab83206770c08ccac9e6aae  pg-close-probe.cjs
+```
