@@ -5,10 +5,10 @@ stream factory. It can dispose that socket when a peer stalls, while pg retains
 responsibility for TLS negotiation and certificate checks. The transport proof
 passes with pg 8.23.1 and Node 24.13.0. This is injected transport evidence,
 not native PostgreSQL recovery acceptance or complete acquisition closure.
-The selected recovery configuration uses preloaded PEM material under design
-decision 1a. The [DNS/SCRAM acquisition audit](queued-connection.md) is a further
-blocking prerequisite: socket disposal does not settle all internal connection
-work. See the checkpoint for preserved implementation evidence and open tasks.
+Recovery uses preloaded PEM material and one packaged Node child under design
+decisions 1a–1d. The [DNS/SCRAM acquisition audit](queued-connection.md) records why
+socket disposal alone cannot settle all connection work. Implemented public-child,
+TLS and native evidence and remaining checks are recorded in the checkpoint.
 
 ## Run
 

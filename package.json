@@ -285,6 +285,7 @@
     ]
   },
   "files": [
-    "dist"
+    "dist",
+    "src/*/README.md"
   ]
 }
