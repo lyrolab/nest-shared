@@ -3,6 +3,10 @@ import { ModuleMetadata, Type } from "@nestjs/common"
 export interface AiModuleOptions {
   apiKey: string
   defaultModel?: string
+  defaultEmbeddingModel?: string
+  /**
+   * Cache TTL in milliseconds. Defaults to 24 hours; `0` disables the cache.
+   */
   cacheTtlMs?: number
 }
 
