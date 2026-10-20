@@ -11,6 +11,7 @@ import {
 } from "./index"
 
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { execFile } from "node:child_process"
 import { join } from "node:path"
 import { promisify } from "node:util"
@@ -944,6 +945,78 @@ describe("retained test database recovery public contract", () => {
     expect(
       query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
     ).toBe(false)
+  })
+
+  const faultScenarios = JSON.parse(
+    readFileSync(
+      join(__dirname, "fixtures/recovery-fault-scenarios.json"),
+      "utf8",
+    ),
+  ) as Array<{
+    name: string
+    at: string
+    code: string
+    outcome: string
+    patch?: object
+    duplicate?: boolean
+    empty?: boolean
+    reject?: boolean
+    closeFailure?: boolean
+  }>
+  it.each(faultScenarios)("handles $name conservatively", async (scenario) => {
+    const { input, target, query, close } = mockSession()
+    let inspections = 0
+    query.mockReset().mockImplementation((sql) => {
+      let at = "configure"
+      let rows: object[] = []
+      if (sql.includes("current_database() AS name")) {
+        at = "binding"
+        rows = [binding]
+      } else if (sql.includes("pg_try_advisory_lock")) {
+        at = "lock"
+        rows = [{ locked: true }]
+      } else if (sql.includes("WHERE datname = $1 OR oid")) {
+        at = ["inspect", "recheck", "verify"][inspections++]
+        rows = at === "verify" ? [] : [target]
+      } else if (sql.startsWith("DROP")) at = "drop"
+      if (at === scenario.at) {
+        if (scenario.reject)
+          return Promise.reject(new Error("private driver response"))
+        if (scenario.empty) return Promise.resolve([])
+        if (scenario.patch)
+          return Promise.resolve([
+            { ...(rows[0] ?? target), ...scenario.patch },
+          ])
+        if (scenario.duplicate) return Promise.resolve([...rows, ...rows])
+      }
+      return Promise.resolve(rows)
+    })
+    if (scenario.closeFailure)
+      close.mockRejectedValueOnce(new Error("private transport failure"))
+    const error: unknown = await recoverTestDatabase(input).catch(
+      (error: unknown) => error,
+    )
+    expect(error).toBeInstanceOf(TestDatabaseRecoveryError)
+    expect(error).toMatchObject({
+      code: scenario.code,
+      outcome: scenario.outcome,
+    })
+    const failures = (error as TestDatabaseRecoveryError).failures
+    if (scenario.closeFailure)
+      expect(failures.at(-1)).toEqual({ code: "CLOSE_FAILED", phase: "close" })
+    if (scenario.reject && scenario.closeFailure)
+      expect(failures).toEqual([
+        { code: "DATABASE_FAILURE", phase: scenario.at },
+        { code: "CLOSE_FAILED", phase: "close" },
+      ])
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(
+      query.mock.calls.filter(([sql]) => sql.startsWith("DROP")),
+    ).toHaveLength(["unknown", "removed"].includes(scenario.outcome) ? 1 : 0)
+    expect(JSON.stringify(error)).not.toMatch(
+      /private|foreign|renamed|base_test_/,
+    )
+    expect((error as Error).cause).toBeUndefined()
   })
 
   it("retains uncertainty and safe primary plus close failures", async () => {

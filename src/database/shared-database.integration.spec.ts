@@ -1,7 +1,7 @@
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { Test, TestingModule } from "@nestjs/testing"
 import { DataSource } from "typeorm"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { spawn, fork, ChildProcess, Serializable } from "node:child_process"
 import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { readFileSync } from "node:fs"
@@ -447,13 +447,13 @@ integration("owned PostgreSQL public boundary", () => {
     await absent(info.databaseName)
   })
 
-  function ordinaryChild(mode: "creator" | "recovery") {
+  function ordinaryChild(mode: "creator" | "recovery", url = recoveryBaseUrl) {
     const child = fork(
       join(__dirname, "fixtures/recovery-runner.cjs"),
       [mode],
       {
         cwd: process.cwd(),
-        env: { ...process.env, DATABASE_URL: recoveryBaseUrl },
+        env: { ...process.env, DATABASE_URL: url },
         stdio: ["ignore", "ignore", "ignore", "ipc"],
       },
     )
@@ -502,8 +502,8 @@ integration("owned PostgreSQL public boundary", () => {
     }
   }
 
-  async function retainedCreator() {
-    const run = ordinaryChild("creator")
+  async function retainedCreator(url = recoveryBaseUrl) {
+    const run = ordinaryChild("creator", url)
     const { ready } = await run.message<{
       ready: {
         database: TestDatabaseInfo
@@ -535,9 +535,14 @@ integration("owned PostgreSQL public boundary", () => {
     throw new Error("Creator connection did not leave")
   }
 
-  async function freshRecovery(input: Serializable) {
-    const run = ordinaryChild("recovery")
+  async function freshRecovery(
+    input: Serializable,
+    afterDispatch?: (run: ReturnType<typeof ordinaryChild>) => Promise<void>,
+    url = recoveryBaseUrl,
+  ) {
+    const run = ordinaryChild("recovery", url)
     run.child.send(input)
+    await afterDispatch?.(run)
     const result = await run.message<{
       result?: { status: string }
       failure?: { code: string; outcome: string }
@@ -608,6 +613,151 @@ integration("owned PostgreSQL public boundary", () => {
         }
     }
   }, 60000)
+
+  it.each(['quoted"base', "雪😀".repeat(7)])(
+    "recovers original identities with a %s base",
+    async (prefix) => {
+      const baseName = prefix + randomUUID().slice(0, 8)
+      await admin.query(
+        `CREATE DATABASE ${quote(baseName)} OWNER ${quote(recoveryRole)}`,
+      )
+      externalDatabases.add(baseName)
+      const url = targetUrl(recoveryBaseUrl, baseName)
+      const creator = await retainedCreator(url)
+      try {
+        expect(
+          Buffer.byteLength(creator.input.database.databaseName),
+        ).toBeLessThanOrEqual(63)
+        await stopCreator(creator)
+        expect(await freshRecovery(creator.input, undefined, url)).toEqual({
+          result: { status: "removed" },
+        })
+        externalDatabases.delete(creator.input.database.databaseName)
+        expect(await freshRecovery(creator.input, undefined, url)).toEqual({
+          result: { status: "already-absent" },
+        })
+      } finally {
+        if (children.has(creator.child)) {
+          creator.child.kill("SIGKILL")
+          await creator.exit
+        }
+        await admin.query(`DROP DATABASE ${quote(baseName)}`)
+        externalDatabases.delete(baseName)
+      }
+    },
+    30000,
+  )
+
+  it("serializes concurrent fresh recovery and permits an explicit retry", async () => {
+    const creator = await retainedCreator()
+    await stopCreator(creator)
+    const results = await Promise.all([
+      freshRecovery(creator.input),
+      freshRecovery(creator.input),
+    ])
+    expect(
+      results.filter((value) => value.result?.status === "removed"),
+    ).toHaveLength(1)
+    for (const value of results) {
+      if (value.failure)
+        expect(value.failure).toMatchObject({
+          code: "BUSY",
+          outcome: "not-attempted",
+        })
+      else expect(["removed", "already-absent"]).toContain(value.result?.status)
+    }
+    expect(await freshRecovery(creator.input)).toEqual({
+      result: { status: "already-absent" },
+    })
+    externalDatabases.delete(creator.input.database.databaseName)
+  }, 30000)
+
+  it("refuses two recovery callers behind a real held lifecycle lock", async () => {
+    const creator = await retainedCreator()
+    await stopCreator(creator)
+    const key = createHash("sha256")
+      .update(
+        JSON.stringify([
+          "@lyrolab/nest-shared/test-database",
+          creator.input.database.databaseName,
+        ]),
+      )
+      .digest()
+      .readBigInt64BE()
+      .toString()
+    const barrier = admin.createQueryRunner()
+    await barrier.connect()
+    try {
+      await barrier.query("SELECT pg_advisory_lock($1::bigint)", [key])
+      for (const result of await Promise.all([
+        freshRecovery(creator.input),
+        freshRecovery(creator.input),
+      ]))
+        expect(result).toMatchObject({
+          failure: { code: "BUSY", outcome: "not-attempted" },
+        })
+    } finally {
+      await barrier.query("SELECT pg_advisory_unlock($1::bigint)", [key])
+      await barrier.release()
+    }
+    expect(await freshRecovery(creator.input)).toEqual({
+      result: { status: "removed" },
+    })
+    externalDatabases.delete(creator.input.database.databaseName)
+  }, 30000)
+
+  it.each(["deadline", "cancellation"])(
+    "bounds a real connected-target DROP with %s and retries explicitly",
+    async (mode) => {
+      const creator = await retainedCreator()
+      await stopCreator(creator)
+      const name = creator.input.database.databaseName
+      const peer = await new DataSource({
+        type: "postgres",
+        url: targetUrl(recoveryBaseUrl, name),
+      }).initialize()
+      try {
+        const started = Date.now()
+        const result = await freshRecovery(
+          { ...creator.input, timeoutMs: mode === "deadline" ? 100 : 10000 },
+          mode === "cancellation"
+            ? async (run) => {
+                const limit = Date.now() + 5000
+                while (Date.now() < limit) {
+                  const rows = await admin.query<{ query: string }[]>(
+                    "SELECT query FROM pg_stat_activity WHERE usename = $1 AND datname = $2 AND state = 'active' AND query LIKE 'DROP DATABASE %'",
+                    [recoveryRole, fixtureBase],
+                  )
+                  if (rows.length) {
+                    run.child.send("abort")
+                    return
+                  }
+                  await new Promise((resolveWait) =>
+                    setTimeout(resolveWait, 10),
+                  )
+                }
+                throw new Error("DROP barrier was not reached")
+              }
+            : undefined,
+        )
+        expect(result).toMatchObject({
+          failure: {
+            code: mode === "deadline" ? "DEADLINE_EXCEEDED" : "CANCELLED",
+            outcome: "unknown",
+          },
+        })
+        expect(Date.now() - started).toBeLessThan(7000)
+        expect(await peer.query("SELECT id FROM sentinel")).toEqual([{ id: 7 }])
+      } finally {
+        await peer.destroy()
+      }
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "removed" },
+      })
+      externalDatabases.delete(name)
+    },
+    30000,
+  )
 
   const recoveryScenarios = JSON.parse(
     readFileSync(join(__dirname, "fixtures/recovery-scenarios.json"), "utf8"),

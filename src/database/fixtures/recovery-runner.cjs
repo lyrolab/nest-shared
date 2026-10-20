@@ -15,10 +15,15 @@ const send = (value) => process.send(value)
 const finish = () => process.disconnect()
 
 async function recover(input) {
+  const controller = new AbortController()
+  process.on("message", (message) => {
+    if (message === "abort") controller.abort()
+  })
   try {
     const result = await recoverTestDatabase({
       ...input,
       base: input.base ?? base,
+      signal: controller.signal,
     })
     send({ result })
   } catch (error) {
