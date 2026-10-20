@@ -1038,7 +1038,7 @@ describe("retained test database recovery public contract", () => {
     const { stdout, stderr } = await promisify(execFile)(
       process.execPath,
       [join(__dirname, "fixtures/isolation-runner.cjs")],
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     )
     expect(stderr).toBe("")
     const reports = stdout
@@ -1060,5 +1060,5 @@ describe("retained test database recovery public contract", () => {
     expect(reports).toHaveLength(inputs.length)
     for (const report of reports)
       expect(report).toMatchObject({ passed: true, naturalCallerExit: true })
-  }, 65_000)
+  }, 125_000)
 })

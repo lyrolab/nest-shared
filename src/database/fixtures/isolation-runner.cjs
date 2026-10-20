@@ -468,204 +468,220 @@ async function caller() {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
     port = server.address().port
   }
-  childProcess.spawn = (executable, args, options) => {
-    assert.equal(owned, undefined)
-    assert.equal(executable, process.execPath)
-    assert.deepEqual(options.env, {})
-    assert.deepEqual(options.stdio, ["ignore", "ignore", "ignore", "ipc"])
-    assert.equal(options.shell, false)
-    assert.equal(options.detached, false)
-    assert.equal(args.length, 1)
-    if (scenario.deniedLaunch) throw new Error("Fixture launch denied")
-    owned = spawn(
-      executable,
-      scenario.missingEntry
-        ? [path.join(__dirname, "absent-entry.cjs")]
-        : [__filename, "--engine", scenario.name],
-      options,
-    )
-    const emit = owned.emit
-    owned.emit = function (event, ...values) {
-      if (event === "message" && values[0]?.audit) {
-        const kind = values[0].audit
-        if (kind === "acquisition") {
-          acquisitions++
-          if (scenario.cancelAcquisition) controller.abort()
-          if (scenario.parentLoss) owned.disconnect()
-        } else if (kind === "settled") settlements++
-        else if (kind === "query") queries++
-        return true
-      }
-      return emit.call(this, event, ...values)
-    }
-    if (scenario.earlyCancel) controller.abort()
-    owned.on("exit", () => {
-      exited = true
-    })
-    owned.on("disconnect", () => {
-      disconnected = true
-    })
-    owned.on("message", (message) => {
-      trace.push(
-        "child:" +
-          message.type +
-          ":" +
-          (message.phase ?? message.outcome ?? ""),
-      )
-      if (message.type === "phase" && message.phase === scenario.abort)
-        controller.abort()
-    })
-    const originalSend = owned.send.bind(owned)
-    owned.send = (message, callback) => {
-      trace.push("parent:" + message.type)
-      pendingSends++
-      if (scenario.sendFailure === message.type) {
-        pendingSends--
-        callback(new Error("Fixture send failed"))
-        return false
-      }
-      const result = originalSend(message, (error) => {
-        pendingSends--
-        callback(error)
-      })
-      if (!result) backpressure = true
-      if (message.type === "permit-drop" && scenario.abort === "permit")
-        controller.abort()
-      return result
-    }
-    return owned
-  }
-  const { ConfigService } = require("@nestjs/config")
-  const {
-    SharedDatabaseModule: Database,
-    recoverTestDatabase,
-    TestDatabaseRecoveryError,
-  } = require("@lyrolab/nest-shared/database")
-  const databaseUrl = `postgres://fixture:${scenario.emptyPassword ? "" : "fixture"}@${scenario.acquisition === "dns" || (scenario.tls && !scenario.ip) ? "localhost" : "127.0.0.1"}:${port}/base`
-  const tlsInput = scenario.tls
-    ? {
-        caPem: scenario.untrusted
-          ? material.other.cert
-          : scenario.malformed
-            ? "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"
-            : material.cert,
-        ...(scenario.mutual || scenario.keyMismatch
-          ? {
-              certPem: material.cert,
-              keyPem: scenario.keyMismatch ? material.other.key : material.key,
-            }
-          : {}),
-      }
-    : undefined
-  const database = Database.getTestDatabaseInfo(
-    new ConfigService({ DATABASE_URL: databaseUrl }),
-  )
-  if (scenario.preabort) controller.abort()
-  const jobs = scenario.parentPool ? saturate() : Promise.resolve()
-  const workMs =
-    scenario.acquisition || scenario.noReady || scenario.backpressure
-      ? 500
-      : scenario.stall
-        ? 500
-        : 2000
-  const started = performance.now()
   try {
-    const recovering = recoverTestDatabase({
-      base: {
-        databaseUrl,
-        expectedRole: "fixture",
-        ...(tlsInput ? { tls: tlsInput } : {}),
-        ...(scenario.backpressure
-          ? {
-              tls: {
-                caPem:
-                  "-----BEGIN CERTIFICATE-----\n" +
-                  "A".repeat(1_000_000) +
-                  "\n-----END CERTIFICATE-----",
-              },
-            }
-          : {}),
-      },
-      database,
-      acquiredOid: 42,
-      exclusiveTarget: true,
-      timeoutMs: workMs,
-      closeTimeoutMs: 400,
-      signal: controller.signal,
-    })
-    if (scenario.mutation) {
-      tlsInput.caPem = "changed"
-      tlsInput.certPem = "changed"
-      tlsInput.keyPem = "changed"
+    childProcess.spawn = (executable, args, options) => {
+      assert.equal(owned, undefined)
+      assert.equal(executable, process.execPath)
+      assert.deepEqual(options.env, {})
+      assert.deepEqual(options.stdio, ["ignore", "ignore", "ignore", "ipc"])
+      assert.equal(options.shell, false)
+      assert.equal(options.detached, false)
+      assert.equal(args.length, 1)
+      if (scenario.deniedLaunch) throw new Error("Fixture launch denied")
+      owned = spawn(
+        executable,
+        scenario.missingEntry
+          ? [path.join(__dirname, "absent-entry.cjs")]
+          : [__filename, "--engine", scenario.name],
+        options,
+      )
+      const emit = owned.emit
+      owned.emit = function (event, ...values) {
+        if (event === "message" && values[0]?.audit) {
+          const kind = values[0].audit
+          if (kind === "acquisition") {
+            acquisitions++
+            if (scenario.cancelAcquisition) controller.abort()
+            if (scenario.parentLoss) owned.disconnect()
+          } else if (kind === "settled") settlements++
+          else if (kind === "query") queries++
+          return true
+        }
+        return emit.call(this, event, ...values)
+      }
+      if (scenario.earlyCancel) controller.abort()
+      owned.on("exit", () => {
+        exited = true
+      })
+      owned.on("disconnect", () => {
+        disconnected = true
+      })
+      owned.on("message", (message) => {
+        trace.push(
+          "child:" +
+            message.type +
+            ":" +
+            (message.phase ?? message.outcome ?? ""),
+        )
+        if (message.type === "phase" && message.phase === scenario.abort)
+          controller.abort()
+      })
+      const originalSend = owned.send.bind(owned)
+      owned.send = (message, callback) => {
+        trace.push("parent:" + message.type)
+        pendingSends++
+        if (scenario.sendFailure === message.type) {
+          pendingSends--
+          callback(new Error("Fixture send failed"))
+          return false
+        }
+        const result = originalSend(message, (error) => {
+          pendingSends--
+          callback(error)
+        })
+        if (!result) backpressure = true
+        if (message.type === "permit-drop" && scenario.abort === "permit")
+          controller.abort()
+        return result
+      }
+      return owned
     }
-    const result = await recovering
-    assert.equal(scenario.code, undefined)
-    assert.equal(result.status, scenario.status)
-  } catch (error) {
-    assert.ok(error instanceof TestDatabaseRecoveryError)
-    assert.equal(error.code, scenario.code)
-    assert.equal(error.outcome, scenario.outcome)
-    if (scenario.closeFailure || scenario.forced)
-      assert.equal(error.failures.at(-1).code, "CLOSE_FAILED")
-    assert.doesNotMatch(
-      JSON.stringify(error),
-      /fixture|base_test_|password|certificate|Error:/,
+    const { ConfigService } = require("@nestjs/config")
+    const {
+      SharedDatabaseModule: Database,
+      recoverTestDatabase,
+      TestDatabaseRecoveryError,
+    } = require("@lyrolab/nest-shared/database")
+    const databaseUrl = `postgres://fixture:${scenario.emptyPassword ? "" : "fixture"}@${scenario.acquisition === "dns" || (scenario.tls && !scenario.ip) ? "localhost" : "127.0.0.1"}:${port}/base`
+    const tlsInput = scenario.tls
+      ? {
+          caPem: scenario.untrusted
+            ? material.other.cert
+            : scenario.malformed
+              ? "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"
+              : material.cert,
+          ...(scenario.mutual || scenario.keyMismatch
+            ? {
+                certPem: material.cert,
+                keyPem: scenario.keyMismatch
+                  ? material.other.key
+                  : material.key,
+              }
+            : {}),
+        }
+      : undefined
+    const database = Database.getTestDatabaseInfo(
+      new ConfigService({ DATABASE_URL: databaseUrl }),
     )
-  }
-  if (scenario.preabort || scenario.deniedLaunch) assert.equal(owned, undefined)
-  else {
-    assert.equal(exited, true)
-    assert.equal(disconnected, true)
-    assert.equal(pendingSends, 0)
-    if (scenario.forced || scenario.crash)
-      assert.equal(owned.signalCode, "SIGKILL")
-    else if (!scenario.missingEntry)
-      assert.equal(owned.exitCode, 0, JSON.stringify(trace))
-  }
-  const elapsedMs = Math.round(performance.now() - started)
-  assert.ok(
-    elapsedMs < workMs + 400,
-    `Invocation exceeded its budget: ${elapsedMs}`,
-  )
-  if (scenario.acquisition) {
-    assert.equal(acquisitions, 1)
-    assert.equal(settlements, 0)
-    assert.equal(queries, 0)
-    assert.ok(!trace.includes("parent:permit-drop"))
-    if (scenario.acquisition === "scram") assert.equal(peers.size, 0)
-  }
-  if (scenario.tls) {
-    if (scenario.malformed || scenario.keyMismatch) assert.equal(connections, 0)
-    else if (scenario.untrusted || scenario.mismatch || scenario.handshakeStall)
-      assert.equal(queries, 0)
+    if (scenario.preabort) controller.abort()
+    const jobs = scenario.parentPool ? saturate() : Promise.resolve()
+    const workMs =
+      scenario.acquisition || scenario.noReady || scenario.backpressure
+        ? 500
+        : scenario.stall
+          ? 500
+          : 2000
+    const started = performance.now()
+    try {
+      const recovering = recoverTestDatabase({
+        base: {
+          databaseUrl,
+          expectedRole: "fixture",
+          ...(tlsInput ? { tls: tlsInput } : {}),
+          ...(scenario.backpressure
+            ? {
+                tls: {
+                  caPem:
+                    "-----BEGIN CERTIFICATE-----\n" +
+                    "A".repeat(1_000_000) +
+                    "\n-----END CERTIFICATE-----",
+                },
+              }
+            : {}),
+        },
+        database,
+        acquiredOid: 42,
+        exclusiveTarget: true,
+        timeoutMs: workMs,
+        closeTimeoutMs: 400,
+        signal: controller.signal,
+      })
+      if (scenario.mutation) {
+        tlsInput.caPem = "changed"
+        tlsInput.certPem = "changed"
+        tlsInput.keyPem = "changed"
+      }
+      const result = await recovering
+      assert.equal(scenario.code, undefined)
+      assert.equal(result.status, scenario.status)
+    } catch (error) {
+      assert.ok(error instanceof TestDatabaseRecoveryError)
+      assert.equal(error.code, scenario.code)
+      assert.equal(error.outcome, scenario.outcome)
+      if (scenario.closeFailure || scenario.forced)
+        assert.equal(error.failures.at(-1).code, "CLOSE_FAILED")
+      assert.doesNotMatch(
+        JSON.stringify(error),
+        /fixture|base_test_|password|certificate|Error:/,
+      )
+    }
+    if (scenario.preabort || scenario.deniedLaunch)
+      assert.equal(owned, undefined)
     else {
-      assert.equal(secure, true)
+      assert.equal(exited, true)
+      assert.equal(disconnected, true)
+      assert.equal(pendingSends, 0)
+      if (scenario.forced || scenario.crash)
+        assert.equal(owned.signalCode, "SIGKILL")
+      else if (!scenario.missingEntry)
+        assert.equal(owned.exitCode, 0, JSON.stringify(trace))
+    }
+    const elapsedMs = Math.round(performance.now() - started)
+    assert.ok(
+      elapsedMs < workMs + 400,
+      `Invocation exceeded its budget: ${elapsedMs}`,
+    )
+    if (scenario.acquisition) {
+      assert.equal(acquisitions, 1)
+      assert.equal(settlements, 0)
+      assert.equal(queries, 0)
+      assert.ok(!trace.includes("parent:permit-drop"))
+      if (scenario.acquisition === "scram") assert.equal(peers.size, 0)
+    }
+    if (scenario.tls) {
+      if (scenario.malformed || scenario.keyMismatch)
+        assert.equal(connections, 0)
+      else if (
+        scenario.untrusted ||
+        scenario.mismatch ||
+        scenario.handshakeStall
+      )
+        assert.equal(queries, 0)
+      else {
+        assert.equal(secure, true)
+        assert.ok(queries > 0)
+      }
+      if (scenario.mutual) assert.equal(clientVerified, true)
+    }
+    if (scenario.emptyPassword) {
+      assert.equal(passwordObserved, true)
       assert.ok(queries > 0)
     }
-    if (scenario.mutual) assert.equal(clientVerified, true)
+    if (scenario.backpressure) assert.equal(backpressure, true)
+    if (scenario.earlyCancel || scenario.noReady)
+      assert.ok(!trace.includes("parent:start"))
+    await jobs
+    console.log(
+      JSON.stringify({
+        name: scenario.name,
+        passed: true,
+        elapsedMs,
+        acquisitions,
+        queries,
+        backpressure,
+        forcedChild: owned?.signalCode === "SIGKILL",
+      }),
+    )
+  } finally {
+    if (owned && owned.exitCode === null && owned.signalCode === null) {
+      const closed = once(owned, "close")
+      owned.kill("SIGKILL")
+      await closed
+    }
+    for (const peer of peers) peer.destroy()
+    if (server) await new Promise((resolve) => server.close(resolve))
+    if (directory) fs.rmSync(directory, { recursive: true, force: true })
   }
-  if (scenario.emptyPassword) {
-    assert.equal(passwordObserved, true)
-    assert.ok(queries > 0)
-  }
-  if (scenario.backpressure) assert.equal(backpressure, true)
-  if (scenario.earlyCancel || scenario.noReady)
-    assert.ok(!trace.includes("parent:start"))
-  await jobs
-  for (const peer of peers) peer.destroy()
-  if (server) await new Promise((resolve) => server.close(resolve))
-  if (directory) fs.rmSync(directory, { recursive: true, force: true })
-  console.log(
-    JSON.stringify({
-      name: scenario.name,
-      passed: true,
-      elapsedMs,
-      acquisitions,
-      queries,
-      backpressure,
-      forcedChild: owned?.signalCode === "SIGKILL",
-    }),
-  )
 }
 
 async function main() {
@@ -703,8 +719,7 @@ async function main() {
       assert.equal(JSON.parse(stdout).passed, true)
       console.log(
         JSON.stringify({
-          name: entry.name,
-          passed: true,
+          ...JSON.parse(stdout),
           naturalCallerExit: true,
         }),
       )
