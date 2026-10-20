@@ -1,0 +1,22 @@
+[
+  {
+    "name": "dns-deadline",
+    "acquisition": "dns",
+    "cancel": false
+  },
+  {
+    "name": "dns-cancel",
+    "acquisition": "dns",
+    "cancel": true
+  },
+  {
+    "name": "scram-deadline",
+    "acquisition": "scram",
+    "cancel": false
+  },
+  {
+    "name": "scram-cancel",
+    "acquisition": "scram",
+    "cancel": true
+  }
+]

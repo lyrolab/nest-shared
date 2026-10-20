@@ -150,3 +150,33 @@ The change SHALL include mandatory native PostgreSQL CI coverage using real crea
 - **WHEN** review has merged the feature but publication is pending or failed
 - **THEN** the issue stays open with Founding Engineer responsible for release verification or repair routing
 - **AND** no predicted version, manual publication, consumer installed-package patch or readiness claim substitutes for a verified consumable release
+
+### Requirement: Recovery-only in-memory TLS and complete acquisition closure
+
+Recovery SHALL accept the narrow TestDatabaseRecoveryTls PEM-string contract and mode matrix in design.md. It SHALL capture independent base/TLS inputs before awaits, preserve full certificate and DNS/IP identity verification, and perform no certificate-file acquisition or implicit driver URL parsing. It SHALL refuse file path parameters and conflicting/unsupported shapes before filesystem, Client or socket creation, using INVALID_INPUT and not-attempted. Existing normal setup/lifetime-lease TLS URL behavior SHALL remain supported.
+
+#### Scenario: Certificate paths under real worker-pool contention
+
+- **WHEN** a URL contains sslrootcert, sslcert or sslkey for an actual regular file or FIFO while finite unrelated work occupies the shared pool, with any sslmode or simultaneous PEM input
+- **THEN** recovery refuses before every open/stat/read/close and every connect/query, without unfinished recovery-owned work
+- **AND** deadline and cancellation variants settle within the declared work plus close allowance with no late dispatch and natural exit after fixture-owned work finishes
+
+#### Scenario: Explicit TLS material is captured and verified
+
+- **WHEN** valid trusted CA PEM and optional paired client certificate/key PEM are supplied independently with a supported mode
+- **THEN** DNS/IP certificates and client identity work through pg SSLRequest with full peer verification
+- **AND** unknown CA, wrong hostname/IP, malformed PEM, mismatched/partial client credentials, oversize strings, buffers/arrays and conflicting options fail safely under the stated validation/connection phase
+- **AND** caller mutation after invocation cannot alter the captured trust or identity
+
+#### Scenario: Normal TLS lifecycle compatibility
+
+- **WHEN** normal forTest setup uses supported TLS certificate URL parameters
+- **THEN** setup, lifetime exclusion and teardown retain their configuration contract without requiring the new recovery-only PEM preparation
+- **AND** production forRoot configuration and migrations remain unchanged
+
+#### Scenario: Internal authentication or resolution outlives socket close
+
+- **WHEN** deadline/cancellation occurs while real hostname lookup or pg SCRAM crypto is queued behind finite unrelated shared-pool work in a cold fresh recovery process
+- **THEN** recovery must settle every recovery-started operation within the original work/close allowance and cannot start more authentication or query work after return
+- **AND** observed Client end/socket close alone cannot satisfy that requirement, unrelated fixture work is counted separately, and no abandoned promise or caller process exit substitutes for cleanup
+- **AND** a concrete public-interface mismatch returns to Founding Engineer before implementation continues

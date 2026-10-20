@@ -35,7 +35,18 @@ Release verification belongs to Founding Engineer after review: verify actual re
 ## 6. Review fixes
 
 - [x] 6.1 Contextually type the pg configuration and verify npm ci plus build with the actual locked pg types.
-- [ ] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
+- [ ] 6.2 Implement the recovery-only in-memory PEM contract and mode/refusal matrix in design.md after the connection prerequisite is resolved. Refuse every certificate path before filesystem/client/socket work; preserve the normal TLS URL path. Verify bounded public API settlement, no late dispatch, no recovery-owned file work and natural exit under actual finite pool contention.
 - [x] 6.3 Run the affected public API, transport and native checks and update the checkpoint with exact inputs.
 
-Handoff requires passing CI on the final head. Record that result on the issue after committing the verification metadata.
+Apply-to-Simplifier handoff requires passing CI on the final head. Record that result on the issue after committing the verification metadata.
+
+## 7. Configuration boundary correction
+
+Implementation is gated by 7.1. Earlier checked tasks retain their recorded input scope; they do not establish the revised public contract or connection-acquisition closure. Preserve the completed ownership/lifecycle code and valid baseline evidence.
+
+- [ ] 7.1 Resolve the concrete DNS/SCRAM mismatch with Founding Engineer and commit an implementable supported acquisition/disposal design. Verify the durable queued-connection probe against that decision; no private pg access, auth downgrade, synchronous crypto or abandoned work.
+- [ ] 7.2 Export TestDatabaseRecoveryTls and base.tls with strict PEM strings, byte limits, paired client identity and immutable capture. Implement pre-I/O URL path/ambiguity refusal and the documented sslmode matrix without pg connection-string parsing. Verify public declarations, malformed/oversize/unknown shapes, mutation and safe errors.
+- [ ] 7.3 Add public-boundary regular/FIFO path refusal cases under actual finite worker-pool saturation, including disable/duplicate/encoded keys, simultaneous valid PEM, deadline and cancellation. Assert zero open/stat/read/close, zero client/socket/connect/query and natural exit, distinguishing fixture jobs from recovery work.
+- [ ] 7.4 Prove trusted DNS/IP TLS and mutual TLS with in-memory PEM; reject unknown CA, hostname/IP mismatch, malformed/mismatched client material and unsupported flags. Reuse table-driven shutdown cases; verify no late authentication/query dispatch, settled internal work and natural success/failure exits. Separately prove normal lifetime-lease setup/teardown with TLS certificate URLs and unchanged production configuration.
+- [ ] 7.5 Update the public recovery recipe and compatibility notes with caller-owned preloading, equivalent explicit base URL, independent role/endpoint/TLS binding and preparation limits. Do not persist secrets in ownership evidence. Verify snippets through the built public declarations and native two-process recovery.
+- [ ] 7.6 Run clean locked install/build, affected public/configuration/transport/native regressions and final-head CI. Record exact inputs/invalidation conditions in the checkpoint, inspect sensitive surfaces and continue Applier → Simplifier → Reviewer on this issue/branch/PR. Preserve the open-issue return to Founding Engineer after reviewed merge for actual release verification.

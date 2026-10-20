@@ -3,8 +3,12 @@
 The administration helper owns a Node socket supplied through pg's public Client
 stream factory. It can dispose that socket when a peer stalls, while pg retains
 responsibility for TLS negotiation and certificate checks. The transport proof
-passes with pg 8.23.1 and Node 24.13.0. Implementation tasks remain unchecked;
-this is injected transport evidence, not native PostgreSQL recovery acceptance.
+passes with pg 8.23.1 and Node 24.13.0. This is injected transport evidence,
+not native PostgreSQL recovery acceptance or complete acquisition closure.
+The selected recovery configuration uses preloaded PEM material under design
+decision 1a. The [DNS/SCRAM acquisition audit](queued-connection.md) is a further
+blocking prerequisite: socket disposal does not settle all internal connection
+work. See the checkpoint for preserved implementation evidence and open tasks.
 
 ## Run
 
@@ -130,3 +134,9 @@ run (formatting changes require a fresh run):
 7956618c6b89eb90e6895f0dc463c739b5317498658a6271aba33369f4b0504d  transport-scenarios.json
 4b8ed77e196eb925c2910ed2ae2045943ee356e85ab83206770c08ccac9e6aae  pg-close-probe.cjs
 ```
+
+## Verification required for the configuration correction
+
+Keep the queued certificate probe as historical failure input. After Founding Engineer resolves the connection-acquisition boundary, port the selected PEM/mode matrix into the generic public runner. Use actual finite worker-pool saturation with actual regular/FIFO paths and require refusal before every open/stat/read/close and network dispatch. Prove valid trusted DNS/IP and paired client certificate/key PEM, safe refusal of unknown trust/hostname/malformed/conflicting input, captured caller values and normal TLS lifetime-lease compatibility.
+
+Audit cold initialization, resolution, credential fallback, authentication and TLS together. Require all recovery-started work to settle within the original work/close allowance, no late dispatch and natural success/failure exits. Count unrelated fixture-owned pool jobs separately. Re-run clean locked install/build, affected public/transport/native checks and final-head CI for the implemented correction; earlier green checks do not establish these guarantees.

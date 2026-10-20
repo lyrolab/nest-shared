@@ -1,6 +1,6 @@
 # Queued certificate acquisition blocks the recovery deadline
 
-The current in-process file acquisition cannot meet the accepted recovery budget. Return this mismatch to the pipeline lead before implementation continues. No production workaround is applied.
+Historical failing input: in-process file acquisition cannot meet the accepted recovery budget. The implementation remains unchanged; the selected recovery configuration contract requires independently preloaded PEM material. No production workaround is applied.
 
 Run from the built checkout with run scratch configured:
 
@@ -23,4 +23,4 @@ Node documents the shared worker pool and exposes no signal parameter for [open]
 
 A promise race would leave file work running after return. Synchronous file calls would block deadline/cancellation processing during the call. Changing the global worker-pool size cannot establish an upper bound. None is a supported correction to this contract.
 
-The lead must route an explicit design correction. One candidate is independently supplied, preloaded immutable TLS material with no file acquisition inside bounded recovery; that changes the public configuration contract and is not authorized by the current proposal. Preserve certificate/hostname verification, exact ownership, lifecycle exclusion, conservative outcomes and cleanup failures. Do not silently disable TLS, weaken budgets or require caller process exit.
+Design decision 1a selects independently preloaded immutable TLS material with no file acquisition inside bounded recovery. The further [DNS/SCRAM audit](queued-connection.md) establishes unfinished connection work that this configuration correction alone cannot settle. Preserve certificate/hostname verification, exact ownership, lifecycle exclusion, conservative outcomes and cleanup failures. Do not silently disable TLS, weaken budgets or require caller process exit.
