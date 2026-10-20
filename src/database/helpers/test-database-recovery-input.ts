@@ -11,8 +11,17 @@ function refuse(
   throw new TestDatabaseRecoveryError([{ code, phase: "validate" }])
 }
 
-function validText(value: unknown, empty = false): value is string {
-  if (typeof value !== "string" || (!empty && !value) || value.includes("\0"))
+function validText(
+  value: unknown,
+  empty = false,
+  maximum = 65_536,
+): value is string {
+  if (
+    typeof value !== "string" ||
+    (!empty && !value) ||
+    value.length > maximum ||
+    value.includes("\0")
+  )
     return false
   // Buffer replaces lone surrogates; accepting them would change the saved identity.
   return Buffer.from(value, "utf8").toString("utf8") === value
@@ -93,14 +102,35 @@ function captureTls(value: unknown): TestDatabaseRecoveryTls | undefined {
   if (!record(value, ["caPem", "certPem", "keyPem"])) refuse("INVALID_INPUT")
   const { caPem, certPem, keyPem } = value as TestDatabaseRecoveryTls
   const pem = (text: unknown, kind: "certificate" | "key") => {
-    if (!validText(text) || Buffer.byteLength(text) > 1_048_576)
+    if (
+      !validText(text, false, 1_048_576) ||
+      Buffer.byteLength(text) > 1_048_576
+    )
       refuse("INVALID_INPUT")
     const source = text
     const pattern =
       kind === "certificate"
-        ? /^(?:\s*-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----\s*)+$/
-        : /^\s*-----BEGIN (PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY)-----\s+[A-Za-z0-9+/=\s]+-----END \1-----\s*$/
-    if (!pattern.test(source)) refuse("INVALID_INPUT")
+        ? /-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g
+        : /-----BEGIN (PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY)-----([\s\S]*?)-----END \1-----/g
+    let offset = 0,
+      count = 0
+    for (const block of source.matchAll(pattern)) {
+      if (
+        source.slice(offset, block.index).trim() ||
+        !/^[A-Za-z0-9+/=\r\n]+$/.test(
+          block[kind === "certificate" ? 1 : 2].trim(),
+        )
+      )
+        refuse("INVALID_INPUT")
+      offset = block.index + block[0].length
+      count++
+    }
+    if (
+      !count ||
+      source.slice(offset).trim() ||
+      (kind === "key" && count !== 1)
+    )
+      refuse("INVALID_INPUT")
     return source
   }
   const ca = pem(caPem, "certificate")

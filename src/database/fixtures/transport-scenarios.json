@@ -167,5 +167,37 @@
     "file": "fifo",
     "key": "sslkey",
     "mode": "refusal"
+  },
+  {
+    "name": "config-encoded-path-under-contention",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslrootcert",
+    "encoded": true,
+    "mode": "deadline"
+  },
+  {
+    "name": "config-duplicate-path-under-contention",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslcert",
+    "duplicate": true,
+    "mode": "cancel"
+  },
+  {
+    "name": "config-disabled-path-under-contention",
+    "phase": "configuration",
+    "file": "regular",
+    "key": "sslkey",
+    "disable": true,
+    "mode": "deadline"
+  },
+  {
+    "name": "config-pem-and-path-under-contention",
+    "phase": "configuration",
+    "file": "fifo",
+    "key": "sslrootcert",
+    "material": true,
+    "mode": "cancel"
   }
 ]

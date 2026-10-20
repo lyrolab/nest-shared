@@ -1,0 +1,103 @@
+[
+  {
+    "name": "remove",
+    "status": "removed"
+  },
+  {
+    "name": "absent",
+    "absent": true,
+    "status": "already-absent"
+  },
+  {
+    "name": "connect-failure",
+    "rejectConnect": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "close-failure",
+    "rejectClose": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed"
+  },
+  {
+    "name": "close-stall",
+    "stallClose": true,
+    "code": "CLOSE_FAILED",
+    "outcome": "removed",
+    "forced": true
+  },
+  {
+    "name": "cancel-before-permit",
+    "abort": "drop",
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "cancel-after-permit",
+    "abort": "permit",
+    "code": "CANCELLED",
+    "outcome": "unknown",
+    "stall": "permitted-recheck"
+  },
+  {
+    "name": "deadline-connect",
+    "stall": "connect",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "deadline-inspect",
+    "stall": "inspect",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "deadline-drop",
+    "stall": "drop",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "unknown"
+  },
+  {
+    "name": "deadline-verify",
+    "stall": "verify",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "unknown"
+  },
+  {
+    "name": "crash-after-permit",
+    "crash": "permit",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "crash-after-drop",
+    "crash": "drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "bad-version",
+    "badReady": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "duplicate-ready",
+    "duplicateReady": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "missing-entry",
+    "missingEntry": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "preabort",
+    "preabort": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  }
+]

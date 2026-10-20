@@ -67,15 +67,10 @@ export function shape(
     fields.every((key) => Object.hasOwn(value, key))
   )
 }
-export function childMessage(value: unknown): value is ChildMessage {
-  if (
-    typeof value !== "object" ||
-    !value ||
-    !("version" in value) ||
-    value.version !== 1 ||
-    !("type" in value)
-  )
-    return false
+export function childMessage(raw: unknown): raw is ChildMessage {
+  if (typeof raw !== "object" || !raw) return false
+  const value = raw as Record<string, unknown>
+  if (value.version !== 1 || typeof value.type !== "string") return false
   switch (value.type) {
     case "ready":
       return shape(value, ["version", "type"])

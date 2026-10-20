@@ -127,61 +127,12 @@ async function child(scenario, port, certificateDir) {
 
 async function configurationChild(scenario, port, certificateDir) {
   const { ConfigService } = require("@nestjs/config")
-  const { Client } = require("pg")
   const {
     SharedDatabaseModule: Database,
     recoverTestDatabase,
   } = require("@lyrolab/nest-shared/database")
+  const crypto = require("node:crypto")
   const controller = new AbortController()
-  let connects = 0
-  let queries = 0
-  let opened = 0
-  let closed = 0
-  let reads = 0
-  let settledReads = 0
-  let abortTimer
-  const originalConnect = Client.prototype.connect
-  const originalQuery = Client.prototype.query
-  Client.prototype.connect = function (...args) {
-    connects++
-    return originalConnect.apply(this, args)
-  }
-  Client.prototype.query = function (...args) {
-    queries++
-    return originalQuery.apply(this, args)
-  }
-  const files = require("node:fs/promises")
-  const originalOpen = files.open
-  const originalRead = files.readFile
-  files.open = async (...args) => {
-    const file = await originalOpen(...args)
-    opened++
-    const originalClose = file.close.bind(file)
-    file.close = async () => {
-      await originalClose()
-      closed++
-    }
-    return file
-  }
-  if (scenario.file === "regular") {
-    files.readFile = async (file, { signal }) => {
-      reads++
-      if (scenario.mode === "cancel")
-        abortTimer = setTimeout(() => controller.abort(), 20)
-      try {
-        // Hold this public file operation until interruption reaches it.
-        if (!signal.aborted)
-          await new Promise((resolve) =>
-            signal.addEventListener("abort", resolve, { once: true }),
-          )
-        return await originalRead(file, { signal })
-      } finally {
-        settledReads++
-      }
-    }
-  }
-  const url = new URL(`postgres://probe:probe@127.0.0.1:${port}/probe`)
-  url.searchParams.set("sslmode", "verify-full")
   const filename =
     scenario.file === "fifo"
       ? path.join(certificateDir, "input.fifo")
@@ -190,56 +141,83 @@ async function configurationChild(scenario, port, certificateDir) {
         : scenario.file === "device"
           ? "/dev/null"
           : path.join(certificateDir, "cert.pem")
+  const url = new URL(`postgres://probe:probe@127.0.0.1:${port}/probe`)
+  url.searchParams.set("sslmode", "verify-full")
   url.searchParams.set(scenario.key, filename)
-  const config = new ConfigService({ DATABASE_URL: url.toString() })
-  const database = Database.getTestDatabaseInfo(config)
+  if (scenario.disable) url.searchParams.set("sslmode", "disable")
+  if (scenario.duplicate) url.searchParams.append(scenario.key, filename)
+  if (scenario.encoded)
+    url.search = url.search.replace("sslrootcert", "%73slrootcert")
+  const material = scenario.material
+    ? { caPem: fs.readFileSync(path.join(certificateDir, "cert.pem"), "utf8") }
+    : undefined
+  const database = Database.getTestDatabaseInfo(
+    new ConfigService({ DATABASE_URL: url.toString() }),
+  )
+  let fileWork = 0,
+    launches = 0
+  const files = require("node:fs/promises")
+  for (const key of ["open", "stat", "readFile"]) {
+    const original = files[key]
+    files[key] = (...args) => {
+      fileWork++
+      return original(...args)
+    }
+  }
+  const processes = require("node:child_process")
+  const originalSpawn = processes.spawn
+  processes.spawn = (...args) => {
+    launches++
+    return originalSpawn(...args)
+  }
+  const jobs = Promise.all(
+    Array.from(
+      { length: 4 },
+      () =>
+        new Promise((resolve, reject) => {
+          crypto.pbkdf2("local", "fixture", 300_000, 32, "sha256", (error) =>
+            error ? reject(error) : resolve(),
+          )
+        }),
+    ),
+  )
+  const timer =
+    scenario.mode === "cancel"
+      ? setTimeout(() => controller.abort(), 20)
+      : undefined
   const started = performance.now()
-  let failure
-  if (scenario.mode === "cancel" && scenario.file !== "regular")
-    abortTimer = setTimeout(() => controller.abort(), 20)
-  try {
-    await recoverTestDatabase({
-      base: { databaseUrl: url.toString(), expectedRole: "probe" },
+  await assert.rejects(
+    recoverTestDatabase({
+      base: {
+        databaseUrl: url.toString(),
+        expectedRole: "probe",
+        tls: material,
+      },
       database,
       acquiredOid: 42,
       exclusiveTarget: true,
-      timeoutMs: scenario.mode === "deadline" ? 40 : 500,
+      timeoutMs: 40,
       closeTimeoutMs: 40,
       signal: controller.signal,
-    })
-    assert.fail("Configuration must refuse before connecting")
-  } catch (error) {
-    failure = error.code
-    assert.equal(error.outcome, "not-attempted")
-    assert.equal(error.phase, "connect")
-  } finally {
-    clearTimeout(abortTimer)
-  }
+    }),
+    { code: "INVALID_INPUT", phase: "validate", outcome: "not-attempted" },
+  )
   const elapsedMs = Math.ceil(performance.now() - started)
-  const stopped = scenario.mode === "cancel" ? "CANCELLED" : "DEADLINE_EXCEEDED"
-  if (scenario.file === "regular") assert.equal(failure, stopped)
-  else if (scenario.mode === "refusal")
-    assert.equal(failure, "DATABASE_FAILURE")
-  else assert.ok(["DATABASE_FAILURE", stopped].includes(failure))
-  assert.ok(elapsedMs < 250)
-  if (failure === "DATABASE_FAILURE" || scenario.file === "regular")
-    assert.equal(opened, 1)
-  assert.equal(closed, opened)
-  assert.equal(reads, scenario.file === "regular" ? 1 : 0)
-  assert.equal(settledReads, reads)
-  // Wait beyond the work budget to catch any resumed dispatch after return.
+  clearTimeout(timer)
+  assert.ok(elapsedMs < 80)
+  await jobs
   await new Promise((resolve) => setTimeout(resolve, 100))
-  assert.equal(connects, 0)
-  assert.equal(queries, 0)
+  assert.equal(fileWork, 0)
+  assert.equal(launches, 0)
   process.disconnect()
   console.log(
     JSON.stringify({
       closed: true,
       closeMs: elapsedMs,
-      failure,
-      opened,
-      settledReads,
-      dispatches: connects + queries,
+      failure: "INVALID_INPUT",
+      opened: 0,
+      settledReads: 0,
+      dispatches: 0,
       unhandled: 0,
     }),
   )

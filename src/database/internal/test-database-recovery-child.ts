@@ -29,6 +29,8 @@ let permitReject: (() => void) | undefined
 let closeResolve: ((deadline: number) => void) | undefined
 let gracefulUntil: number | undefined
 let closing = false
+let closeReceived = false
+let resultSend: Promise<void> | undefined
 
 function stop(reason: TestDatabaseRecoveryCode) {
   if (!controller.signal.aborted) controller.abort(reason)
@@ -104,15 +106,10 @@ function validInput(value: unknown): value is RecoveryInput {
     input.closeTimeoutMs <= 30_000
   )
 }
-function parentMessage(value: unknown): value is ParentMessage {
-  if (
-    typeof value !== "object" ||
-    !value ||
-    !("version" in value) ||
-    value.version !== 1 ||
-    !("type" in value)
-  )
-    return false
+function parentMessage(raw: unknown): raw is ParentMessage {
+  if (typeof raw !== "object" || !raw) return false
+  const value = raw as Record<string, unknown>
+  if (value.version !== 1 || typeof value.type !== "string") return false
   if (value.type === "start")
     return (
       shape(value, ["version", "type", "input", "workUntil", "closeUntil"]) &&
@@ -156,7 +153,8 @@ async function finishWork(observation: RecoveryObservation) {
     observation.failures.push({ code: "CLOSE_FAILED", phase: "close" })
   }
   reported = true
-  await send({ version: 1, type: "result", ...observation })
+  resultSend = send({ version: 1, type: "result", ...observation })
+  await resultSend
 }
 async function run(input: RecoveryInput, remaining: number) {
   const { executeRecovery } = await import("./test-database-recovery-engine")
@@ -188,7 +186,10 @@ async function run(input: RecoveryInput, remaining: number) {
       if (controller.signal.aborted) created.interrupt()
     },
   )
-  await finishWork(observation)
+  await finishWork({
+    outcome: observation.outcome,
+    failures: observation.failures,
+  })
 }
 function onMessage(value: unknown) {
   if (++received > 16 || !boundedMessage(value) || !parentMessage(value)) {
@@ -233,12 +234,17 @@ function onMessage(value: unknown) {
     clearTimeout(workTimer)
     clearTimeout(fence)
     process.removeListener("message", onMessage)
-    if (process.connected) process.disconnect()
+    void resultSend
+      ?.then(() => {
+        if (process.connected) process.disconnect()
+      })
+      .catch(() => emergency())
   } else {
-    if (value.type === "close" && (!closing || gracefulUntil !== undefined)) {
+    if (value.type === "close" && (!closing || closeReceived)) {
       emergency()
       return
     }
+    if (value.type === "close") closeReceived = true
     if (value.type === "cancel") stop(value.reason)
     closeUntil = Math.min(closeUntil, value.closeUntil)
     gracefulUntil = Math.min(

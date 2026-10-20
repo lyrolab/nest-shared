@@ -6,7 +6,6 @@ import {
   recoverTestDatabase,
   RecoverTestDatabaseOptions,
   TestDatabaseRecoveryError,
-  TestDatabaseRecoveryResult,
   SharedDatabaseModule as Database,
 } from "./index"
 
@@ -658,39 +657,6 @@ function record(baseName = "base"): RecoverTestDatabaseOptions {
   }
 }
 
-const binding = {
-  name: "base",
-  session: "local",
-  current: "local",
-  role: 7,
-  template: false,
-}
-function mockSession() {
-  const input = record()
-  const target = {
-    name: input.database.databaseName,
-    oid: 42,
-    owner: 7,
-    template: false,
-  }
-  const query = jest
-    .fn<Promise<object[]>, [string, unknown[], string, number]>()
-    .mockResolvedValue([])
-    .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([binding])
-    .mockResolvedValueOnce([{ locked: true }])
-    .mockResolvedValueOnce([target])
-    .mockResolvedValueOnce([target])
-  const connect = jest.fn().mockResolvedValue(undefined)
-  const close = jest.fn().mockResolvedValue(undefined)
-  const interrupt = jest.fn()
-  const session = { query, connect, close, interrupt, healthy: true }
-  jest
-    .spyOn(TestDatabaseSession, "create")
-    .mockResolvedValue(session as unknown as TestDatabaseSession)
-  return { input, target, query, close, interrupt, session }
-}
-
 describe("retained test database recovery public contract", () => {
   afterEach(async () => {
     jest.restoreAllMocks()
@@ -893,158 +859,107 @@ describe("retained test database recovery public contract", () => {
     expect(Object.isFrozen(captured)).toBe(true)
   })
 
-  it("removes through ordinary DROP and checks absence without changing the current invocation", async () => {
-    const { input, query } = mockSession()
-    const token = Database.initializeTestInvocation()
-    const result: TestDatabaseRecoveryResult = await recoverTestDatabase(input)
-    expect(result).toEqual({ status: "removed" })
-    expect(Database.initializeTestInvocation()).toBe(token)
-    const ddl = query.mock.calls.filter(([sql]) =>
-      String(sql).startsWith("DROP"),
-    )
-    expect(ddl).toHaveLength(1)
-    expect(ddl[0][0]).toBe(`DROP DATABASE "${input.database.databaseName}"`)
-    expect(query.mock.calls.at(-1)?.[0]).toContain(
-      "WHERE datname = $1 OR oid = $2::oid",
-    )
-  })
-
-  it("returns explicit already-absent without DROP", async () => {
-    const { input, query } = mockSession()
-    query
-      .mockReset()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([binding])
-      .mockResolvedValueOnce([{ locked: true }])
-      .mockResolvedValue([])
-    await expect(recoverTestDatabase(input)).resolves.toEqual({
-      status: "already-absent",
-    })
-    expect(
-      query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
-    ).toBe(false)
-  })
-
+  const envelope =
+    "-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----"
   it.each([
-    ["replacement", { oid: 99 }, "IDENTITY_MISMATCH"],
-    ["rename", { name: "renamed" }, "IDENTITY_MISMATCH"],
-    ["indirect owner", { owner: 8 }, "OWNERSHIP_MISMATCH"],
-    ["template", { template: true }, "UNSAFE_TARGET"],
-  ])("preserves %s without DDL", async (_label, change, code) => {
-    const { input, query, target } = mockSession()
-    query
-      .mockReset()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([binding])
-      .mockResolvedValueOnce([{ locked: true }])
-      .mockResolvedValue([{ ...target, ...change }])
-    await expect(recoverTestDatabase(input)).rejects.toMatchObject({
-      code,
-      outcome: "not-attempted",
-    })
-    expect(
-      query.mock.calls.some(([sql]) => String(sql).startsWith("DROP")),
-    ).toBe(false)
-  })
-
-  const faultScenarios = JSON.parse(
-    readFileSync(
-      join(__dirname, "fixtures/recovery-fault-scenarios.json"),
-      "utf8",
-    ),
-  ) as Array<{
-    name: string
-    at: string
-    code: string
-    outcome: string
-    patch?: object
-    duplicate?: boolean
-    empty?: boolean
-    reject?: boolean
-    closeFailure?: boolean
-  }>
-  it.each(faultScenarios)("handles $name conservatively", async (scenario) => {
-    const { input, target, query, close } = mockSession()
-    let inspections = 0
-    query.mockReset().mockImplementation((sql) => {
-      let at = "configure"
-      let rows: object[] = []
-      if (sql.includes("current_database() AS name")) {
-        at = "binding"
-        rows = [binding]
-      } else if (sql.includes("pg_try_advisory_lock")) {
-        at = "lock"
-        rows = [{ locked: true }]
-      } else if (sql.includes("WHERE datname = $1 OR oid")) {
-        at = ["inspect", "recheck", "verify"][inspections++]
-        rows = at === "verify" ? [] : [target]
-      } else if (sql.startsWith("DROP")) at = "drop"
-      if (at === scenario.at) {
-        if (scenario.reject)
-          return Promise.reject(new Error("private driver response"))
-        if (scenario.empty) return Promise.resolve([])
-        if (scenario.patch)
-          return Promise.resolve([
-            { ...(rows[0] ?? target), ...scenario.patch },
-          ])
-        if (scenario.duplicate) return Promise.resolve([...rows, ...rows])
+    [undefined, undefined, true],
+    ["disable", undefined, true],
+    [undefined, { caPem: envelope }, true],
+    ["require", { caPem: envelope }, true],
+    ["verify-ca", { caPem: envelope }, true],
+    ["verify-full", { caPem: envelope }, true],
+    ["disable", { caPem: envelope }, false],
+    ["require", undefined, false],
+    ["verify-ca", undefined, false],
+    ["verify-full", undefined, false],
+    ["", undefined, false],
+    ["no-verify", { caPem: envelope }, false],
+  ])(
+    "captures the explicit TLS mode %p with material %p",
+    (mode, tls, accepted) => {
+      const input = record()
+      const url = new URL(input.base.databaseUrl)
+      if (mode !== undefined) url.searchParams.set("sslmode", mode)
+      const options = {
+        ...input,
+        base: { ...input.base, databaseUrl: url.toString(), tls },
       }
-      return Promise.resolve(rows)
-    })
-    if (scenario.closeFailure)
-      close.mockRejectedValueOnce(new Error("private transport failure"))
-    const error: unknown = await recoverTestDatabase(input).catch(
-      (error: unknown) => error,
-    )
-    expect(error).toBeInstanceOf(TestDatabaseRecoveryError)
-    expect(error).toMatchObject({
-      code: scenario.code,
-      outcome: scenario.outcome,
-    })
-    const failures = (error as TestDatabaseRecoveryError).failures
-    if (scenario.closeFailure)
-      expect(failures.at(-1)).toEqual({ code: "CLOSE_FAILED", phase: "close" })
-    if (scenario.reject && scenario.closeFailure)
-      expect(failures).toEqual([
-        { code: "DATABASE_FAILURE", phase: scenario.at },
-        { code: "CLOSE_FAILED", phase: "close" },
-      ])
-    expect(close).toHaveBeenCalledTimes(1)
-    expect(
-      query.mock.calls.filter(([sql]) => sql.startsWith("DROP")),
-    ).toHaveLength(["unknown", "removed"].includes(scenario.outcome) ? 1 : 0)
-    expect(JSON.stringify(error)).not.toMatch(
-      /private|foreign|renamed|base_test_/,
-    )
-    expect((error as Error).cause).toBeUndefined()
+      if (accepted) expect(captureRecoveryInput(options).tls).toEqual(tls)
+      else
+        expect(() => captureRecoveryInput(options)).toThrow(
+          TestDatabaseRecoveryError,
+        )
+    },
+  )
+  it.each([
+    "sslrootcert=",
+    "sslcert=/regular",
+    "sslkey=/fifo",
+    "sslrootcert=/fifo&sslmode=disable",
+    "%73slrootcert=/regular",
+    "SSLROOTCERT=/regular",
+    "sslcert=a&sslcert=b",
+    "sslmode=require&sslmode=require",
+    "ssl=true",
+  ])(
+    "refuses path or ambiguous configuration %s before launch",
+    async (query) => {
+      const input = record()
+      await expect(
+        recoverTestDatabase({
+          ...input,
+          base: {
+            ...input.base,
+            databaseUrl: input.base.databaseUrl + "?" + query,
+            tls: { caPem: envelope },
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+        phase: "validate",
+        outcome: "not-attempted",
+      })
+    },
+  )
+  it.each([
+    { caPem: "not PEM" },
+    { caPem: "" },
+    { caPem: Buffer.from(envelope) },
+    { caPem: [envelope] },
+    { caPem: envelope, rejectUnauthorized: false },
+    { caPem: envelope, certPem: envelope },
+    { caPem: envelope, keyPem: envelope },
+    { caPem: envelope + "\0" },
+    { caPem: "a".repeat(1_048_577) },
+    {
+      caPem: envelope,
+      certPem: envelope,
+      keyPem:
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----\nZm9v\n-----END ENCRYPTED PRIVATE KEY-----",
+    },
+  ])("refuses unsupported PEM shape %#", (tls) => {
+    const input = record()
+    expect(() =>
+      captureRecoveryInput({
+        ...input,
+        base: { ...input.base, tls },
+      } as RecoverTestDatabaseOptions),
+    ).toThrow(TestDatabaseRecoveryError)
   })
-
-  it("retains uncertainty and safe primary plus close failures", async () => {
-    const { input, query, close } = mockSession()
-    query.mockRejectedValueOnce(new Error("private server response"))
-    close.mockRejectedValueOnce(new Error("private close response"))
-    const error: unknown = await recoverTestDatabase(input).catch(
-      (error: unknown) => error,
+  it("captures immutable PEM primitives and refuses accessors without invoking them", () => {
+    const input = record()
+    const tls = { caPem: envelope }
+    const options = { ...input, base: { ...input.base, tls } }
+    const captured = captureRecoveryInput(options)
+    tls.caPem = "replacement"
+    expect(captured.tls?.caPem).toBe(envelope)
+    expect(Object.isFrozen(captured.tls)).toBe(true)
+    const read = jest.fn(() => envelope)
+    Object.defineProperty(tls, "caPem", { get: read })
+    expect(() => captureRecoveryInput(options)).toThrow(
+      TestDatabaseRecoveryError,
     )
-    expect(error).toBeInstanceOf(TestDatabaseRecoveryError)
-    expect(error).toMatchObject({
-      outcome: "unknown",
-      failures: [
-        { code: "DATABASE_FAILURE", phase: "drop" },
-        { code: "CLOSE_FAILED", phase: "close" },
-      ],
-    })
-    expect(JSON.stringify(error)).not.toMatch(/private|local|base_test/)
-    expect((error as Error).cause).toBeUndefined()
-  })
-
-  it("rejects confirmed absence when close fails", async () => {
-    const { input, close } = mockSession()
-    close.mockRejectedValueOnce(new Error("close failed"))
-    await expect(recoverTestDatabase(input)).rejects.toMatchObject({
-      code: "CLOSE_FAILED",
-      outcome: "removed",
-    })
+    expect(read).not.toHaveBeenCalled()
   })
 
   it("rejects preconnect cancellation without creating a session", async () => {
@@ -1119,134 +1034,31 @@ describe("retained test database recovery public contract", () => {
     })
   })
 
-  it("uses the captured target when the caller mutates its record during connection", async () => {
-    const { input, query, session } = mockSession()
-    const original = input.database.databaseName
-    session.connect.mockImplementation(() => {
-      Object.assign(input.database, { databaseName: "caller-replacement" })
-      return Promise.resolve()
-    })
-    await expect(recoverTestDatabase(input)).resolves.toEqual({
-      status: "removed",
-    })
-    expect(
-      query.mock.calls.filter(([sql]) => sql.startsWith("DROP"))[0][0],
-    ).toBe(`DROP DATABASE "${original}"`)
-  })
-
-  it.each(["connect", "inspect", "drop", "verify"])(
-    "stops late continuations after the work deadline during %s",
-    async (at) => {
-      jest.useFakeTimers()
-      try {
-        const { input, query, session, target, interrupt, close } =
-          mockSession()
-        let release: () => void = () => undefined
-        let reached: () => void = () => undefined
-        const barrier = new Promise<void>((resolve) => {
-          reached = resolve
-        })
-        const paused = () =>
-          new Promise<object[]>((resolve) => {
-            release = () => resolve([])
-            reached()
-          })
-        if (at === "connect") session.connect.mockImplementationOnce(paused)
-        else {
-          query
-            .mockReset()
-            .mockResolvedValueOnce([])
-            .mockResolvedValueOnce([binding])
-            .mockResolvedValueOnce([{ locked: true }])
-          if (at !== "inspect")
-            query
-              .mockResolvedValueOnce([target])
-              .mockResolvedValueOnce([target])
-          if (at === "verify") query.mockResolvedValueOnce([])
-          query.mockImplementationOnce(paused)
-        }
-        const result = recoverTestDatabase({ ...input, timeoutMs: 20 }).catch(
-          (error: unknown) => error,
-        )
-        await barrier
-        await jest.advanceTimersByTimeAsync(20)
-        release()
-        expect(await result).toMatchObject({
-          code: "DEADLINE_EXCEEDED",
-          outcome: ["drop", "verify"].includes(at)
-            ? "unknown"
-            : "not-attempted",
-        })
-        expect(interrupt).toHaveBeenCalled()
-        expect(close).toHaveBeenCalledTimes(1)
-        expect(
-          query.mock.calls.filter(([sql]) => sql.startsWith("DROP")),
-        ).toHaveLength(["drop", "verify"].includes(at) ? 1 : 0)
-        expect(jest.getTimerCount()).toBe(0)
-      } finally {
-        jest.useRealTimers()
-      }
-    },
-  )
-
-  it.each(["connect", "inspect", "drop"])(
-    "stops dispatch after cancellation during %s",
-    async (at) => {
-      const { input, query, session, interrupt } = mockSession()
-      const controller = new AbortController()
-      let release: () => void = () => undefined
-      let reached: () => void = () => undefined
-      const barrier = new Promise<void>((resolve) => {
-        reached = resolve
-      })
-      const paused = () =>
-        new Promise<object[]>((resolve) => {
-          release = () => resolve([])
-          reached()
-        })
-      if (at === "connect") session.connect.mockImplementationOnce(paused)
-      else {
-        query
-          .mockReset()
-          .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([binding])
-          .mockResolvedValueOnce([{ locked: true }])
-        if (at === "inspect") query.mockImplementationOnce(paused)
-        else
-          query
-            .mockResolvedValueOnce([
-              {
-                name: input.database.databaseName,
-                oid: 42,
-                owner: 7,
-                template: false,
-              },
-            ])
-            .mockResolvedValueOnce([
-              {
-                name: input.database.databaseName,
-                oid: 42,
-                owner: 7,
-                template: false,
-              },
-            ])
-            .mockImplementationOnce(paused)
-      }
-      const result = recoverTestDatabase({
-        ...input,
-        signal: controller.signal,
-      })
-      await barrier
-      controller.abort()
-      release()
-      await expect(result).rejects.toMatchObject({
-        code: "CANCELLED",
-        outcome: at === "drop" ? "unknown" : "not-attempted",
-      })
-      expect(interrupt).toHaveBeenCalled()
-      expect(
-        query.mock.calls.filter(([sql]) => sql.startsWith("DROP")),
-      ).toHaveLength(at === "drop" ? 1 : 0)
-    },
-  )
+  it("preserves ownership, permission, uncertainty and disposal through the packaged child", async () => {
+    const { stdout, stderr } = await promisify(execFile)(
+      process.execPath,
+      [join(__dirname, "fixtures/isolation-runner.cjs")],
+      { timeout: 60_000 },
+    )
+    expect(stderr).toBe("")
+    const reports = stdout
+      .trim()
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as { passed: boolean; naturalCallerExit: boolean },
+      )
+    const inputs = [
+      "isolation-scenarios.json",
+      "recovery-fault-scenarios.json",
+    ].flatMap(
+      (name) =>
+        JSON.parse(
+          readFileSync(join(__dirname, "fixtures", name), "utf8"),
+        ) as unknown[],
+    )
+    expect(reports).toHaveLength(inputs.length)
+    for (const report of reports)
+      expect(report).toMatchObject({ passed: true, naturalCallerExit: true })
+  }, 65_000)
 })

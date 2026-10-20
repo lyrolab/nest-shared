@@ -47,7 +47,7 @@ export async function superviseRecovery(
     },
   )
   let phase: TestDatabaseRecoveryPhase = "connect"
-  let outcome: TestDatabaseRecoveryOutcome = "not-attempted"
+  const state = { outcome: "not-attempted" as TestDatabaseRecoveryOutcome }
   const failures: TestDatabaseRecoveryFailure[] = []
   let ready = false,
     requested = false,
@@ -164,7 +164,7 @@ export async function superviseRecovery(
       observation.outcome === "removed" ||
       observation.outcome === "already-absent"
     )
-      outcome = observation.outcome
+      state.outcome = observation.outcome
     for (const failure of observation.failures) add(failure.code, failure.phase)
     return true
   }
@@ -193,7 +193,6 @@ export async function superviseRecovery(
           Math.max(0, workDeadline + input.closeTimeoutMs - performance.now()),
       })
     } else if (message.type === "phase") {
-      if (closing) return
       if (
         !ready ||
         phaseIndex + 1 >= workPhases.length ||
@@ -216,10 +215,10 @@ export async function superviseRecovery(
         return
       }
       permitted = true
-      outcome = "unknown"
+      state.outcome = "unknown"
       send({ version: 1, type: "permit-drop", sequence: 1 })
     } else if (message.type === "closing") {
-      if (!ready || childClosing || terminal || !accept(message)) {
+      if (childClosing || terminal || !accept(message)) {
         stop("DATABASE_FAILURE")
         return
       }
@@ -257,7 +256,7 @@ export async function superviseRecovery(
   const onExit = (code: number | null, exitSignal: NodeJS.Signals | null) => {
     exited = true
     if (!terminal || code !== 0 || exitSignal !== null) {
-      if (!failures.length) add("DATABASE_FAILURE")
+      if (!failures.length && !childClosing) add("DATABASE_FAILURE")
       if (closing || terminal) add("CLOSE_FAILED", "close")
     }
     beginClose()
@@ -265,7 +264,10 @@ export async function superviseRecovery(
   }
   const onDisconnect = () => {
     disconnected = true
-    if (!terminal) stop("DATABASE_FAILURE")
+    if (!terminal) {
+      if (closing) add("CLOSE_FAILED", "close")
+      else stop("DATABASE_FAILURE")
+    }
     checkDisposed()
   }
   const onClose = () => {
@@ -294,12 +296,15 @@ export async function superviseRecovery(
       ...failures.filter((failure) => failure.code !== "CLOSE_FAILED"),
       ...failures.filter((failure) => failure.code === "CLOSE_FAILED"),
     ]
-    throw new TestDatabaseRecoveryError(ordered, outcome)
+    throw new TestDatabaseRecoveryError(ordered, state.outcome)
   }
-  if (!terminal || (outcome !== "removed" && outcome !== "already-absent"))
+  if (
+    !terminal ||
+    (state.outcome !== "removed" && state.outcome !== "already-absent")
+  )
     throw new TestDatabaseRecoveryError(
       [{ code: "DATABASE_FAILURE", phase }],
-      outcome,
+      state.outcome,
     )
-  return { status: outcome }
+  return { status: state.outcome }
 }

@@ -4,6 +4,7 @@ import {
   type RecoverTestDatabaseOptions,
   type TestDatabaseInfo,
   type TestDatabaseRecoveryBase,
+  type TestDatabaseRecoveryTls,
   type TestDatabaseRecoveryResult,
 } from "@lyrolab/nest-shared/database"
 
@@ -31,4 +32,11 @@ export async function recoverSaved(
     }
     throw error
   }
+}
+
+export function withTls(
+  base: TestDatabaseRecoveryBase,
+  tls: TestDatabaseRecoveryTls,
+): TestDatabaseRecoveryBase {
+  return { ...base, tls }
 }
