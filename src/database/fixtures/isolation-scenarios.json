@@ -105,5 +105,88 @@
     "deniedLaunch": true,
     "code": "DATABASE_FAILURE",
     "outcome": "not-attempted"
+  },
+  {
+    "name": "dns-deadline",
+    "acquisition": "dns",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-cancel",
+    "acquisition": "dns",
+    "cancelAcquisition": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-parent-loss",
+    "acquisition": "dns",
+    "parentLoss": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-deadline",
+    "acquisition": "scram",
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-cancel",
+    "acquisition": "scram",
+    "cancelAcquisition": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-parent-loss",
+    "acquisition": "scram",
+    "parentLoss": true,
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "cancel-before-ready",
+    "earlyCancel": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "startup-not-ready",
+    "noReady": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "real-ipc-backpressure",
+    "backpressure": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "start-send-failure",
+    "sendFailure": "start",
+    "code": "DATABASE_FAILURE",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "permit-send-failure",
+    "sendFailure": "permit-drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "name": "parent-pool-contention",
+    "parentPool": true,
+    "status": "removed"
   }
 ]

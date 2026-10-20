@@ -9,10 +9,12 @@ const {
 
 const config = new ConfigService()
 const databaseUrl = config.get("DATABASE_URL")
-const base = {
-  databaseUrl,
-  expectedRole: decodeURIComponent(new URL(databaseUrl).username),
-}
+const base = databaseUrl
+  ? {
+      databaseUrl,
+      expectedRole: decodeURIComponent(new URL(databaseUrl).username),
+    }
+  : undefined
 const send = (value) => process.send(value)
 const finish = () => process.disconnect()
 
@@ -21,6 +23,10 @@ async function recover(input) {
     fault = input.fault
     input = input.options
   }
+  const childProcess = require("node:child_process")
+  const spawn = childProcess.spawn
+  childProcess.spawn = (executable, args, options) =>
+    spawn(executable, [__filename, "--engine", fault ?? "none"], options)
   const controller = new AbortController()
   process.on("message", (message) => {
     if (message === "abort") controller.abort()
@@ -186,5 +192,8 @@ function fail() {
   if (process.connected) finish()
 }
 
-if (process.argv[2] === "creator") void create().catch(fail)
+if (process.argv[2] === "--engine") {
+  fault = process.argv[3] === "none" ? undefined : process.argv[3]
+  require("../../../dist/database/internal/test-database-recovery-child.js")
+} else if (process.argv[2] === "creator") void create().catch(fail)
 else process.once("message", (input) => void recover(input).catch(fail))

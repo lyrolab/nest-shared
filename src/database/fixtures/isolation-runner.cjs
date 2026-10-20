@@ -2,13 +2,86 @@ const assert = require("node:assert/strict")
 const { once } = require("node:events")
 const childProcess = require("node:child_process")
 const path = require("node:path")
+const net = require("node:net")
+const crypto = require("node:crypto")
 const scenarios = [
   ...require("./isolation-scenarios.json"),
   ...require("./recovery-fault-scenarios.json"),
 ]
 const scenario = scenarios.find((entry) => entry.name === process.argv[3])
 
+function saturate() {
+  return Promise.all(
+    Array.from(
+      { length: 4 },
+      () =>
+        new Promise((resolve, reject) => {
+          crypto.pbkdf2("local", "fixture", 2_000_000, 32, "sha256", (error) =>
+            error ? reject(error) : resolve(),
+          )
+        }),
+    ),
+  )
+}
+
+function acquisitionFixture() {
+  assert.deepEqual(Object.keys(process.env), [])
+  assert.deepEqual(process.execArgv, [])
+  const report = (event) => {
+    if (process.connected) process.send({ audit: event }, () => {})
+  }
+  const observe = (promise) =>
+    promise.then(
+      (value) => {
+        report("settled")
+        return value
+      },
+      (error) => {
+        report("settled")
+        throw error
+      },
+    )
+  if (scenario.acquisition === "dns") {
+    const dns = require("node:dns")
+    const lookup = dns.lookup
+    dns.lookup = function (...args) {
+      void saturate()
+      const callback = args.pop()
+      report("acquisition")
+      return lookup.call(this, ...args, (...values) => {
+        report("settled")
+        callback(...values)
+      })
+    }
+  } else {
+    const derive = crypto.webcrypto.subtle.deriveBits
+    crypto.webcrypto.subtle.deriveBits = function (...args) {
+      void saturate()
+      report("acquisition")
+      return observe(derive.apply(this, args))
+    }
+  }
+  const { Client } = require("pg")
+  const query = Client.prototype.query
+  Client.prototype.query = function (...args) {
+    report("query")
+    return query.apply(this, args)
+  }
+  require("../../../dist/database/internal/test-database-recovery-child.js")
+}
+
 function childFixture() {
+  if (scenario.acquisition) return acquisitionFixture()
+  if (scenario.noReady) {
+    setInterval(() => {}, 1000)
+    return
+  }
+  if (scenario.backpressure) {
+    process.send({ version: 1, type: "ready" }, () => {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000)
+    })
+    return
+  }
   const {
     TestDatabaseSession,
   } = require("../../../dist/database/helpers/test-database-session")
@@ -109,6 +182,54 @@ async function caller() {
     disconnected = false,
     pendingSends = 0
   const controller = new AbortController()
+  let acquisitions = 0,
+    settlements = 0,
+    queries = 0,
+    backpressure = false
+  const peers = new Set()
+  let server
+  let port = 5432
+  if (scenario.acquisition) {
+    const auth = (code, text) => {
+      const body = Buffer.from(text),
+        header = Buffer.alloc(9)
+      header[0] = 82
+      header.writeInt32BE(8 + body.length, 1)
+      header.writeInt32BE(code, 5)
+      return Buffer.concat([header, body])
+    }
+    server = net.createServer((socket) => {
+      peers.add(socket)
+      socket.on("error", () => {})
+      socket.on("close", () => peers.delete(socket))
+      let startup = true,
+        pending = Buffer.alloc(0),
+        first = true
+      socket.on("data", (chunk) => {
+        pending = Buffer.concat([pending, chunk])
+        while (pending.length >= (startup ? 4 : 5)) {
+          const size = pending.readInt32BE(startup ? 0 : 1) + (startup ? 0 : 1)
+          if (pending.length < size) return
+          const packet = pending.subarray(0, size)
+          pending = pending.subarray(size)
+          if (startup) {
+            startup = false
+            socket.write(auth(10, "SCRAM-SHA-256\0\0"))
+          } else if (packet[0] === 112 && first) {
+            first = false
+            const offset = packet.indexOf(0, 5) + 5
+            const nonce = packet
+              .subarray(offset)
+              .toString()
+              .match(/r=([^,]+)/)[1]
+            socket.write(auth(11, `r=${nonce}fixture,s=Zml4dHVyZQ==,i=4096`))
+          } else if (packet[0] === 81) queries++
+        }
+      })
+    })
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
+    port = server.address().port
+  }
   childProcess.spawn = (executable, args, options) => {
     assert.equal(owned, undefined)
     assert.equal(executable, process.execPath)
@@ -125,6 +246,21 @@ async function caller() {
         : [__filename, "--engine", scenario.name],
       options,
     )
+    const emit = owned.emit
+    owned.emit = function (event, ...values) {
+      if (event === "message" && values[0]?.audit) {
+        const kind = values[0].audit
+        if (kind === "acquisition") {
+          acquisitions++
+          if (scenario.cancelAcquisition) controller.abort()
+          if (scenario.parentLoss) owned.disconnect()
+        } else if (kind === "settled") settlements++
+        else if (kind === "query") queries++
+        return true
+      }
+      return emit.call(this, event, ...values)
+    }
+    if (scenario.earlyCancel) controller.abort()
     owned.on("exit", () => {
       exited = true
     })
@@ -145,10 +281,16 @@ async function caller() {
     owned.send = (message, callback) => {
       trace.push("parent:" + message.type)
       pendingSends++
+      if (scenario.sendFailure === message.type) {
+        pendingSends--
+        callback(new Error("Fixture send failed"))
+        return false
+      }
       const result = originalSend(message, (error) => {
         pendingSends--
         callback(error)
       })
+      if (!result) backpressure = true
       if (message.type === "permit-drop" && scenario.abort === "permit")
         controller.abort()
       return result
@@ -161,22 +303,43 @@ async function caller() {
     recoverTestDatabase,
     TestDatabaseRecoveryError,
   } = require("@lyrolab/nest-shared/database")
-  const databaseUrl = "postgres://fixture:fixture@127.0.0.1/base"
+  const databaseUrl = `postgres://fixture:fixture@${scenario.acquisition === "dns" ? "localhost" : "127.0.0.1"}:${port}/base`
   const database = Database.getTestDatabaseInfo(
     new ConfigService({ DATABASE_URL: databaseUrl }),
   )
   if (scenario.preabort) controller.abort()
+  const jobs = scenario.parentPool ? saturate() : Promise.resolve()
+  const workMs =
+    scenario.acquisition || scenario.noReady || scenario.backpressure
+      ? 500
+      : scenario.stall
+        ? 500
+        : 2000
   const started = performance.now()
   try {
     const result = await recoverTestDatabase({
-      base: { databaseUrl, expectedRole: "fixture" },
+      base: {
+        databaseUrl,
+        expectedRole: "fixture",
+        ...(scenario.backpressure
+          ? {
+              tls: {
+                caPem:
+                  "-----BEGIN CERTIFICATE-----\n" +
+                  "A".repeat(1_000_000) +
+                  "\n-----END CERTIFICATE-----",
+              },
+            }
+          : {}),
+      },
       database,
       acquiredOid: 42,
       exclusiveTarget: true,
-      timeoutMs: scenario.stall ? 500 : 2000,
+      timeoutMs: workMs,
       closeTimeoutMs: 400,
       signal: controller.signal,
     })
+    assert.equal(scenario.code, undefined)
     assert.equal(result.status, scenario.status)
   } catch (error) {
     assert.ok(error instanceof TestDatabaseRecoveryError)
@@ -199,8 +362,35 @@ async function caller() {
     else if (!scenario.missingEntry)
       assert.equal(owned.exitCode, 0, JSON.stringify(trace))
   }
-  assert.ok(performance.now() - started < (scenario.stall ? 500 : 2000) + 400)
-  console.log(JSON.stringify({ name: scenario.name, passed: true }))
+  const elapsedMs = Math.round(performance.now() - started)
+  assert.ok(
+    elapsedMs < workMs + 400,
+    `Invocation exceeded its budget: ${elapsedMs}`,
+  )
+  if (scenario.acquisition) {
+    assert.equal(acquisitions, 1)
+    assert.equal(settlements, 0)
+    assert.equal(queries, 0)
+    assert.ok(!trace.includes("parent:permit-drop"))
+    if (scenario.acquisition === "scram") assert.equal(peers.size, 0)
+  }
+  if (scenario.backpressure) assert.equal(backpressure, true)
+  if (scenario.earlyCancel || scenario.noReady)
+    assert.ok(!trace.includes("parent:start"))
+  await jobs
+  for (const peer of peers) peer.destroy()
+  if (server) await new Promise((resolve) => server.close(resolve))
+  console.log(
+    JSON.stringify({
+      name: scenario.name,
+      passed: true,
+      elapsedMs,
+      acquisitions,
+      queries,
+      backpressure,
+      forcedChild: owned?.signalCode === "SIGKILL",
+    }),
+  )
 }
 
 async function main() {
