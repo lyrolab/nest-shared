@@ -1,18 +1,30 @@
 {
   "stage": "apply",
-  "remaining": "WIP: run the implemented helper transport regressions after build; integrate lifetime advisory lease and retry state into SharedDatabaseModule; finish native public-package/two-process coverage, declaration smoke, README, CI and final checks. No native recovery acceptance or completed apply stage is claimed.",
+  "remaining": "WIP: 3/17 tasks complete (1.1, 1.2, 2.2). Next complete 2.1 and integrate the lifetime base-session advisory lease and partial-failure/retry state into SharedDatabaseModule (2.3-2.4). Harden remaining work/close budget and fault combinations (3.1-3.4), then native public-package two-process tests, declaration smoke, CI, README and full checks (4-5). Recovery is not ready to release: normal lifecycle does not yet participate in the advisory lock. Preserve the existing proposal and transport proof. Keep the same issue/owner/branch/draft PR. No native recovery or completed apply stage is claimed.",
   "verification": [
     {
-      "command": "npm test -- --runInBand src/database/recover-test-database.spec.ts src/database/shared-database.module.spec.ts",
-      "result": "2 suites, 64 tests pass. Injected API boundaries and existing module tests only; no native PostgreSQL execution.",
-      "testedInput": "Recovery API, input capture, shared identity and owned-session source in this checkpoint; the transport runner is not yet executed.",
-      "invalidatedBy": "Changes to database implementation, dependency versions or these specs."
+      "command": "TMPDIR=\"$PAPERCLIP_RUN_SCRATCH_DIR\" npm test -- --runInBand src/database/shared-database.module.spec.ts",
+      "result": "Pass: 73 tests in the existing generic database runner, including 13 implemented-helper transport scenarios; natural child exits before fixture cleanup, zero unhandled rejections. Injected recovery checks cover original identity, validation, safe failure/close combinations, retained uncertainty and cancellation with no late DROP. No native PostgreSQL coverage ran.",
+      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
+      "invalidatedBy": "Changes to database source/fixtures, package dependencies, TypeScript/Jest configuration or runtime; compiled helper must match source for transport cases."
     },
     {
-      "command": "node_modules/.bin/eslint src/database/helpers/test-database-{identity,recovery-input,session}.ts src/database/recover-test-database.ts src/database/recover-test-database.spec.ts src/database/test-database-recovery-error.ts",
+      "command": "npm run build",
+      "result": "Pass at ebf25ad. This build supplies the unchanged session helper used by the 13 transport scenarios. Later edits to API/input capture require a new build.",
+      "testedInput": "Commit ebf25ad; session helper has not changed since that build.",
+      "invalidatedBy": "Any source or compiler/dependency edit for whole-build evidence; session helper/runtime/driver/fixture edits for transport reuse."
+    },
+    {
+      "command": "node_modules/.bin/eslint src/database/helpers/test-database-{identity,recovery-input,session}.ts src/database/recover-test-database.ts src/database/shared-database.module.spec.ts src/database/test-database-recovery-error.ts",
       "result": "Pass, no warnings or errors.",
-      "testedInput": "The six named TypeScript files before the transport fixture addition.",
-      "invalidatedBy": "Edits to the checked files, TypeScript dependencies or lint configuration."
+      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
+      "invalidatedBy": "Edits to checked files, TypeScript dependencies or lint configuration."
+    },
+    {
+      "command": "node_modules/.bin/prettier --check src/database/helpers/test-database-*.ts src/database/recover-test-database.ts src/database/shared-database.module.spec.ts src/database/test-database-recovery-error.ts src/database/fixtures/transport-runner.cjs src/database/fixtures/transport-scenarios.json",
+      "result": "Pass.",
+      "testedInput": "Database source/fixtures and package manifests SHA-256 526ebb764059332f3e30e62402181cd422656ee12581b129890a5167e41e0b1d",
+      "invalidatedBy": "Edits to the checked files or formatter configuration."
     }
   ]
 }

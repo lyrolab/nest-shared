@@ -73,9 +73,14 @@ export async function recoverTestDatabase(
     }
     return ms
   }
-  const query = <T extends object>(text: string, values: unknown[] = []) => {
+  const query = async <T extends object>(
+    text: string,
+    values: unknown[] = [],
+  ) => {
     const ms = remaining()
-    return session!.query<T>(text, values, phase, ms)
+    const rows = await session!.query<T>(text, values, phase, ms)
+    remaining()
+    return rows
   }
   try {
     remaining()

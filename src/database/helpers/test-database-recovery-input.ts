@@ -27,9 +27,35 @@ function budget(value: unknown, fallback: number, maximum: number): number {
   return value
 }
 
+function record(value: unknown, fields: readonly string[]): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).every((key) => fields.includes(key))
+  )
+}
+
 export function captureRecoveryInput(options: RecoverTestDatabaseOptions) {
   try {
+    if (
+      !record(options, [
+        "base",
+        "database",
+        "acquiredOid",
+        "exclusiveTarget",
+        "timeoutMs",
+        "closeTimeoutMs",
+        "signal",
+      ])
+    )
+      refuse("INVALID_INPUT")
     const { base, database, acquiredOid, exclusiveTarget, signal } = options
+    if (
+      !record(base, ["databaseUrl", "expectedRole"]) ||
+      !record(database, ["namespace", "workerId", "processId", "databaseName"])
+    )
+      refuse("INVALID_INPUT")
     const { databaseUrl, expectedRole } = base
     const { namespace, workerId, processId, databaseName } = database
     if (
@@ -62,6 +88,7 @@ export function captureRecoveryInput(options: RecoverTestDatabaseOptions) {
       !validText(role) ||
       !validText(password, true) ||
       url.hash ||
+      (url.port && (Number(url.port) < 1 || Number(url.port) > 65535)) ||
       role !== expectedRole
     )
       refuse("INVALID_INPUT")
