@@ -17,6 +17,10 @@ const send = (value) => process.send(value)
 const finish = () => process.disconnect()
 
 async function recover(input) {
+  if (input.options) {
+    fault = input.fault
+    input = input.options
+  }
   const controller = new AbortController()
   process.on("message", (message) => {
     if (message === "abort") controller.abort()
@@ -44,6 +48,8 @@ async function recover(input) {
 }
 
 let armed
+let fault
+let dropped = false
 let releaseBarrier
 const baseClients = new WeakSet()
 async function barrier(phase) {
@@ -65,13 +71,34 @@ Client.prototype.query = function (...args) {
       : undefined
   if (phase && armed === phase)
     return barrier(phase).then(() => originalQuery.apply(this, args))
-  return originalQuery.apply(this, args)
+  if (
+    fault === "verify" &&
+    dropped &&
+    sql?.includes("WHERE datname = $1 OR oid")
+  )
+    return Promise.reject(new Error("Injected verification failure"))
+  const result = originalQuery.apply(this, args)
+  if (sql?.startsWith("DROP DATABASE"))
+    return result.then((value) => {
+      dropped = true
+      if (fault?.startsWith("drop-ack"))
+        throw new Error("Injected acknowledgement failure")
+      return value
+    })
+  return result
 }
 const originalEnd = Client.prototype.end
 Client.prototype.end = function (...args) {
   if (baseClients.has(this) && armed === "lease-close")
     return barrier("lease-close").then(() => originalEnd.apply(this, args))
-  return originalEnd.apply(this, args)
+  const result = originalEnd.apply(this, args)
+  if (baseClients.has(this) && fault?.includes("close")) {
+    fault = undefined
+    return result.then(() => {
+      throw new Error("Injected close failure")
+    })
+  }
+  return result
 }
 const originalSynchronize = DataSource.prototype.synchronize
 DataSource.prototype.synchronize = async function (...args) {
@@ -124,6 +151,14 @@ async function create() {
           }
         }
         send({ refused })
+      } else if (message === "failed-close") {
+        fault = "close"
+        try {
+          await Database.closeTestConnection()
+          send({ closeFailed: false })
+        } catch {
+          send({ closeFailed: true })
+        }
       } else if (message === "retry-close") {
         try {
           await Database.closeTestConnection()

@@ -545,7 +545,12 @@ integration("owned PostgreSQL public boundary", () => {
     await afterDispatch?.(run)
     const result = await run.message<{
       result?: { status: string }
-      failure?: { code: string; outcome: string }
+      failure?: {
+        code: string
+        phase: string
+        outcome: string
+        failures: Array<{ code: string; phase: string }>
+      }
     }>()
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
@@ -840,6 +845,62 @@ integration("owned PostgreSQL public boundary", () => {
     } finally {
       await barrier.query("SELECT pg_advisory_unlock($1::bigint)", [key])
       await barrier.release()
+      if (children.has(creator.child)) {
+        creator.child.kill("SIGKILL")
+        await creator.exit
+      }
+    }
+  }, 30000)
+
+  const nativeFaultScenarios = JSON.parse(
+    readFileSync(
+      join(__dirname, "fixtures/native-fault-scenarios.json"),
+      "utf8",
+    ),
+  ) as Array<{
+    fault: string
+    code: string
+    phase: string
+    outcome: string
+    closeFailure?: boolean
+  }>
+  it.each(nativeFaultScenarios)(
+    "preserves $fault at the injected driver boundary with a native postcondition",
+    async ({ fault, code, phase, outcome, closeFailure }) => {
+      const creator = await retainedCreator()
+      await stopCreator(creator)
+      const result = await freshRecovery({ options: creator.input, fault })
+      expect(result).toMatchObject({ failure: { code, phase, outcome } })
+      if (closeFailure)
+        expect(result.failure?.failures).toEqual([
+          { code, phase },
+          { code: "CLOSE_FAILED", phase: "close" },
+        ])
+      await absent(creator.input.database.databaseName)
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "already-absent" },
+      })
+      externalDatabases.delete(creator.input.database.databaseName)
+    },
+    30000,
+  )
+
+  it("retains native teardown retry state after DROP and an injected lease-close failure", async () => {
+    const creator = await retainedCreator()
+    try {
+      creator.child.send("failed-close")
+      expect(await creator.message()).toEqual({ closeFailed: true })
+      await absent(creator.input.database.databaseName)
+      creator.child.send("unsafe")
+      expect(await creator.message()).toEqual({ refused: 3 })
+      creator.child.send("close")
+      expect(await creator.message()).toEqual({ closed: true })
+      expect(await creator.exit).toEqual({ code: 0, signal: null })
+      expect(await freshRecovery(creator.input)).toEqual({
+        result: { status: "already-absent" },
+      })
+      externalDatabases.delete(creator.input.database.databaseName)
+    } finally {
       if (children.has(creator.child)) {
         creator.child.kill("SIGKILL")
         await creator.exit

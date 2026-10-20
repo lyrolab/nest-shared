@@ -1,6 +1,6 @@
 {
   "stage": "apply",
-  "remaining": "WIP: 8/17 tasks checked (1.1, 1.2, 2.1, 2.2, 3.2, 4.1, 4.4, 5.1). Lifetime base-session advisory lease is implemented and injected lifecycle regressions pass. Finish native setup/schema/clear/close/recreate races, real lease-loss and retained partial-cleanup retry (2.3-2.4, 4.3); complete ambiguous actual binding/catalog checks and remaining deadline/close/uncertain post-DROP fault combinations (3.1, 3.3-3.4); extend native public recovery to quoted/UTF-8 bases and real barriers/cancellation/concurrent recoveries (4.2-4.3). Recheck defensive native fixture cleanup added after the passing native input, run final full tests/build/lint, update PR apply marker and hand off only when complete (5.2-5.3). Keep same issue/owner/branch/draft PR. No release or consumer readiness claim. The owned local PostgreSQL container was removed at checkpoint; recreate an owned PostgreSQL 16 container following the README. No credential or database identity belongs in public evidence.",
+  "remaining": "WIP: complete the five new native driver-fault/lease-close retry tests and final full tests/build/lint on the owned PostgreSQL 16 fixture. Native focused run passes 12/12 selected cases for quoted/UTF-8 recovery, concurrent recovery, held lock, connected-target deadlines/cancellation, CREATE/schema/clear/target-close/lease-close barriers and lease-loss/reacquisition retry. Unit runner passes 100/100, including ambiguous binding/catalog and four late-continuation deadline phases. Final verification must rerun all cases after the newest fixture fault controls. Update remaining task checkboxes only after that verification, update PR apply marker and ready state, then hand this issue to Simplifier. Same issue/branch/PR/owner; no release claim.",
   "verification": [
     {
       "command": "DATABASE_URL=<owned disposable local PostgreSQL 16> TMPDIR=\"$PAPERCLIP_RUN_SCRATCH_DIR\" RUNNER_TEMP=\"$PAPERCLIP_RUN_SCRATCH_DIR\" npm test -- --runInBand src/database",
@@ -25,6 +25,18 @@
       "result": "Expected failure is confirmed for the exact missing-prerequisite message, preventing CI skips; dist/database/fixtures is absent.",
       "testedInput": "Current CI prerequisite guard, current compiled build at 9871e24.",
       "invalidatedBy": "Guard, test discovery, build exclusion or CI workflow changes."
+    },
+    {
+      "command": "npm test -- --runInBand src/database/shared-database.module.spec.ts",
+      "result": "Pass: 100/100 including 13 implemented-helper transport cases, public declarations, 16 catalog/failure cases and four deadline continuation cases.",
+      "testedInput": "3801edd unit runner and unchanged compiled production package from the prior checkpoint.",
+      "invalidatedBy": "Unit runner, production source, fixture, dependency, runtime or compiler/Jest configuration changes."
+    },
+    {
+      "command": "DATABASE_URL=<owned local PostgreSQL 16> TMPDIR=<run scratch> RUNNER_TEMP=<run scratch> npm test -- --runInBand src/database/shared-database.integration.spec.ts --testNamePattern \"original identities|concurrent fresh|real held|real connected|native lifecycle|native lease loss\"",
+      "result": "Pass: 12 selected cases; 29 intentionally unselected existing cases. Duration 44.272s. Native contention at five lifecycle phases, real lease loss and explicit retry, quoted/UTF-8 original identity, concurrency and post-dispatch interruption pass. Retry after uncertain cancellation may confirm absence rather than perform DROP.",
+      "testedInput": "Native runner loaded at 3801edd. Recovery fixture later received additive disabled-by-default fault controls while tests ran; final full verification remains required for that exact fixture.",
+      "invalidatedBy": "Native runner, fixture, production source, dependencies/runtime/server or configuration changes. Does not verify the new fault-control cases."
     }
   ]
 }

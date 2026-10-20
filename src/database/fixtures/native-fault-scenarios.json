@@ -1,0 +1,27 @@
+[
+  {
+    "fault": "drop-ack",
+    "phase": "drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "fault": "verify",
+    "phase": "verify",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown"
+  },
+  {
+    "fault": "close",
+    "phase": "close",
+    "code": "CLOSE_FAILED",
+    "outcome": "removed"
+  },
+  {
+    "fault": "drop-ack+close",
+    "phase": "drop",
+    "code": "DATABASE_FAILURE",
+    "outcome": "unknown",
+    "closeFailure": true
+  }
+]
