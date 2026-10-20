@@ -12,14 +12,19 @@ const scenarios = [
 ]
 const scenario = scenarios.find((entry) => entry.name === process.argv[3])
 
-function saturate() {
+function saturate(iterations = 8_000_000) {
   return Promise.all(
     Array.from(
       { length: 4 },
       () =>
         new Promise((resolve, reject) => {
-          crypto.pbkdf2("local", "fixture", 2_000_000, 32, "sha256", (error) =>
-            error ? reject(error) : resolve(),
+          crypto.pbkdf2(
+            "local",
+            "fixture",
+            iterations,
+            32,
+            "sha256",
+            (error) => (error ? reject(error) : resolve()),
           )
         }),
     ),
@@ -207,6 +212,7 @@ async function caller() {
     queries = 0,
     backpressure = false
   const peers = new Set()
+  let database
   let server,
     directory,
     material,
@@ -359,6 +365,7 @@ async function caller() {
             }
           } else if (data[0] === 81) {
             queries++
+            if (scenario.cancelAtQuery) controller.abort()
             const sql = data.subarray(5, -1).toString()
             if (scenario.activeStall) continue
             if (sql.includes("current_database() AS name"))
@@ -401,6 +408,7 @@ async function caller() {
           else if (data[0] === 68) socket.write(packet("n", Buffer.alloc(0)))
           else if (data[0] === 69) {
             queries++
+            if (scenario.cancelAtQuery) controller.abort()
             if (!scenario.activeStall) {
               if (prepared.includes("current_database() AS name"))
                 reply(socket, [
@@ -443,6 +451,7 @@ async function caller() {
       socket.once("data", (request) => {
         assert.equal(request.readInt32BE(4), 80877103)
         socket.write("S")
+        if (scenario.cancelHandshake) controller.abort()
         if (scenario.handshakeStall) return
         const encrypted = new tls.TLSSocket(socket, {
           isServer: true,
@@ -458,7 +467,12 @@ async function caller() {
         encrypted.on("secure", () => {
           secure = true
           if (scenario.mutual) {
-            clientVerified = encrypted.authorized
+            const peer = encrypted.getPeerCertificate()
+            clientVerified =
+              !!peer.raw &&
+              new crypto.X509Certificate(peer.raw).verify(
+                new crypto.X509Certificate(material.cert).publicKey,
+              )
             assert.equal(clientVerified, true)
           }
         })
@@ -560,11 +574,11 @@ async function caller() {
             : {}),
         }
       : undefined
-    const database = Database.getTestDatabaseInfo(
+    database = Database.getTestDatabaseInfo(
       new ConfigService({ DATABASE_URL: databaseUrl }),
     )
     if (scenario.preabort) controller.abort()
-    const jobs = scenario.parentPool ? saturate() : Promise.resolve()
+    const jobs = scenario.parentPool ? saturate(1_000_000) : Promise.resolve()
     const workMs =
       scenario.acquisition || scenario.noReady || scenario.backpressure
         ? 500

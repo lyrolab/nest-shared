@@ -281,5 +281,21 @@
     "name": "explicit-empty-password",
     "emptyPassword": true,
     "status": "removed"
+  },
+  {
+    "name": "pem-active-cancel",
+    "tls": true,
+    "activeStall": true,
+    "cancelAtQuery": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
+  },
+  {
+    "name": "pem-handshake-cancel",
+    "tls": true,
+    "handshakeStall": true,
+    "cancelHandshake": true,
+    "code": "CANCELLED",
+    "outcome": "not-attempted"
   }
 ]

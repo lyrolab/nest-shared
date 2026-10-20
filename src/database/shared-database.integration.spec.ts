@@ -724,26 +724,22 @@ integration("owned PostgreSQL public boundary", () => {
       try {
         const started = Date.now()
         const result = await freshRecovery(
-          { ...creator.input, timeoutMs: mode === "deadline" ? 100 : 10000 },
-          mode === "cancellation"
-            ? async (run) => {
-                const limit = Date.now() + 5000
-                while (Date.now() < limit) {
-                  const rows = await admin.query<{ query: string }[]>(
-                    "SELECT query FROM pg_stat_activity WHERE usename = $1 AND datname = $2 AND state = 'active' AND query LIKE 'DROP DATABASE %'",
-                    [recoveryRole, fixtureBase],
-                  )
-                  if (rows.length) {
-                    run.child.send("abort")
-                    return
-                  }
-                  await new Promise((resolveWait) =>
-                    setTimeout(resolveWait, 10),
-                  )
-                }
-                throw new Error("DROP barrier was not reached")
+          { ...creator.input, timeoutMs: mode === "deadline" ? 1500 : 10000 },
+          async (run) => {
+            const limit = Date.now() + 5000
+            while (Date.now() < limit) {
+              const rows = await admin.query<{ query: string }[]>(
+                "SELECT query FROM pg_stat_activity WHERE usename = $1 AND datname = $2 AND state = 'active' AND query LIKE 'DROP DATABASE %'",
+                [recoveryRole, fixtureBase],
+              )
+              if (rows.length) {
+                if (mode === "cancellation") run.child.send("abort")
+                return
               }
-            : undefined,
+              await new Promise((resolveWait) => setTimeout(resolveWait, 10))
+            }
+            throw new Error("DROP barrier was not reached")
+          },
         )
         expect(result).toMatchObject({
           failure: {
