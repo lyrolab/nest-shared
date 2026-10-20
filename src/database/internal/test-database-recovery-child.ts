@@ -24,6 +24,7 @@ let workUntil = Date.now(),
   closeBudget = 1000
 let workTimer: ReturnType<typeof setTimeout> | undefined
 let fence: ReturnType<typeof setTimeout> | undefined
+let fenceUntil = Infinity
 let permitResolve: (() => void) | undefined
 let permitReject: (() => void) | undefined
 let closeResolve: ((deadline: number) => void) | undefined
@@ -37,14 +38,24 @@ function stop(reason: TestDatabaseRecoveryCode) {
   session?.interrupt()
   permitReject?.()
 }
+function armFence() {
+  const until = Math.min(fenceUntil, closeUntil, Date.now() + closeBudget / 2)
+  if (fence && until >= fenceUntil) return
+  clearTimeout(fence)
+  fenceUntil = until
+  fence = setTimeout(
+    () => process.kill(process.pid, "SIGKILL"),
+    Math.max(0, until - Date.now()),
+  )
+  // Native acquisition may outlive a terminal result; clean children must still exit.
+  fence.unref()
+}
+process.once("exit", () => clearTimeout(fence))
 function emergency() {
   stop("DATABASE_FAILURE")
   clearTimeout(workTimer)
   // Only this dedicated child may dispose itself when its owning channel disappears.
-  fence ??= setTimeout(
-    () => process.kill(process.pid, "SIGKILL"),
-    Math.max(0, Math.min(closeBudget / 2, closeUntil - Date.now())),
-  )
+  armFence()
 }
 function send(message: ChildMessage): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -152,6 +163,7 @@ async function finishWork(observation: RecoveryObservation) {
   } catch {
     observation.failures.push({ code: "CLOSE_FAILED", phase: "close" })
   }
+  armFence()
   reported = true
   resultSend = send({ version: 1, type: "result", ...observation })
   await resultSend
@@ -232,8 +244,7 @@ function onMessage(value: unknown) {
     }
     finished = true
     clearTimeout(workTimer)
-    clearTimeout(fence)
-    process.removeListener("message", onMessage)
+    armFence()
     void resultSend
       ?.then(() => {
         if (process.connected) process.disconnect()
@@ -247,6 +258,7 @@ function onMessage(value: unknown) {
     if (value.type === "close") closeReceived = true
     if (value.type === "cancel") stop(value.reason)
     closeUntil = Math.min(closeUntil, value.closeUntil)
+    if (fence) armFence()
     gracefulUntil = Math.min(
       gracefulUntil ?? Infinity,
       value.gracefulUntil,
@@ -260,7 +272,7 @@ function onMessage(value: unknown) {
   }
 }
 process.on("disconnect", () => {
-  if (!finished) emergency()
+  emergency()
 })
 process.on("message", onMessage)
 process.on("uncaughtException", emergency)

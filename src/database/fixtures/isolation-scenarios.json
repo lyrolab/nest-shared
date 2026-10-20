@@ -323,5 +323,93 @@
     "unpermittedResult": true,
     "code": "DATABASE_FAILURE",
     "outcome": "not-attempted"
+  },
+  {
+    "name": "dns-caller-death-result",
+    "acquisition": "dns",
+    "callerDeath": "result",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-finish",
+    "acquisition": "dns",
+    "callerDeath": "finish",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-finish-races",
+    "acquisition": "dns",
+    "callerDeath": "finish",
+    "races": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-caller-death-disconnect",
+    "acquisition": "dns",
+    "callerDeath": "disconnect",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "dns-terminal-self-disposal",
+    "acquisition": "dns",
+    "selfDisposal": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-result",
+    "acquisition": "scram",
+    "callerDeath": "result",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-finish",
+    "acquisition": "scram",
+    "callerDeath": "finish",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-finish-races",
+    "acquisition": "scram",
+    "callerDeath": "finish",
+    "races": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-caller-death-disconnect",
+    "acquisition": "scram",
+    "callerDeath": "disconnect",
+    "races": false,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
+  },
+  {
+    "name": "scram-terminal-self-disposal",
+    "acquisition": "scram",
+    "selfDisposal": true,
+    "code": "DEADLINE_EXCEEDED",
+    "outcome": "not-attempted",
+    "forced": true
   }
 ]

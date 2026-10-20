@@ -1046,7 +1046,11 @@ describe("retained test database recovery public contract", () => {
       .split("\n")
       .map(
         (line) =>
-          JSON.parse(line) as { passed: boolean; naturalCallerExit: boolean },
+          JSON.parse(line) as {
+            passed: boolean
+            naturalCallerExit?: boolean
+            intentionalCallerDeath?: boolean
+          },
       )
     const inputs = [
       "isolation-scenarios.json",
@@ -1058,7 +1062,11 @@ describe("retained test database recovery public contract", () => {
         ) as unknown[],
     )
     expect(reports).toHaveLength(inputs.length)
-    for (const report of reports)
-      expect(report).toMatchObject({ passed: true, naturalCallerExit: true })
+    for (const report of reports) {
+      expect(report.passed).toBe(true)
+      expect(report.naturalCallerExit || report.intentionalCallerDeath).toBe(
+        true,
+      )
+    }
   }, 125_000)
 })

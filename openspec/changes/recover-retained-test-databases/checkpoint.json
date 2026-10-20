@@ -1,6 +1,6 @@
 {
-  "stage": "propose",
-  "remaining": "Implement the selected retained emergency fence under design decision 1d. Only the dedicated child self-disposal timer may be unreferenced; retain it and loss/error/message handling through result/finish/disconnect until actual exit, with non-extending absolute ceilings. Prerequisite proof passes 29/29 in scratch; production source is unchanged and the review finding remains unresolved until Applier implements and verifies it. Tasks 3.3, 7.1 and 8.1 remain open (26/29 earlier task scope retained). Port actual caller-death/queued DNS/SCRAM/repeated-event cases into built-public-package regressions, preserve natural exits and ordered primary/CLOSE_FAILED/permission uncertainty, then affected child/public/native/package checks and final-head CI. Continue this same issue/branch/PR through Applier, Simplifier and Reviewer. After reviewed merge return the open issue to Founding Engineer for actual release/npm/API/recipe verification. No implementation continuation or monitor is scheduled; combined reassignment to Applier is the live path.",
+  "stage": "apply",
+  "remaining": "WIP: retained non-extending child emergency fence implemented; eight direct caller-death and two terminal self-disposal scenarios added. Build, focused child/public/native/package verification and final-head CI remain. Tasks 3.3, 7.1 and 8.1 stay open pending proof. No current-input test result claimed.",
   "verification": [
     {
       "command": "node openspec/changes/recover-retained-test-databases/verification/retained-fence-probe.cjs",

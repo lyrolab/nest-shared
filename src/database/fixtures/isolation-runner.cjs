@@ -10,6 +10,15 @@ const scenarios = [
   ...require("./isolation-scenarios.json"),
   ...require("./recovery-fault-scenarios.json"),
 ]
+const auditFile = process.argv[4]
+function audit(event, details = {}) {
+  if (auditFile)
+    fs.appendFileSync(
+      auditFile,
+      JSON.stringify({ event, time: Date.now(), ...details }) + "\n",
+      { mode: 0o600 },
+    )
+}
 const scenario = scenarios.find((entry) => entry.name === process.argv[3])
 
 function saturate(iterations = 8_000_000) {
@@ -34,7 +43,42 @@ function saturate(iterations = 8_000_000) {
 function acquisitionFixture() {
   assert.deepEqual(Object.keys(process.env), [])
   assert.deepEqual(process.execArgv, [])
+  if (scenario.callerDeath) {
+    audit("child-start", { pid: process.pid })
+    process.prependListener("message", (message) => {
+      if (message.type === "start")
+        audit("ceiling", { until: message.closeUntil })
+      if (message.type === "close" || message.type === "cancel")
+        audit("ceiling", { until: message.closeUntil })
+      if (message.type === "finish") audit("finish")
+    })
+    process.on("disconnect", () => audit("disconnect"))
+    if (scenario.races) {
+      let injected = false
+      process.prependListener("message", (message) => {
+        if (message.type !== "finish" || injected) return
+        injected = true
+        setTimeout(
+          () => process.emit("message", { version: 1, type: "finish" }),
+          15,
+        )
+        setTimeout(
+          () => process.emit("uncaughtException", new Error("Fixture error")),
+          30,
+        )
+        setTimeout(() => process.emit("disconnect"), 60)
+      })
+    }
+    const kill = process.kill.bind(process)
+    process.kill = (pid, signal) => {
+      assert.equal(pid, process.pid)
+      assert.equal(signal, "SIGKILL")
+      audit("self-disposal")
+      return kill(pid, signal)
+    }
+  }
   const report = (event) => {
+    audit(event)
     if (process.connected) process.send({ audit: event }, () => {})
   }
   const observe = (promise) =>
@@ -504,10 +548,15 @@ async function caller() {
         executable,
         scenario.missingEntry
           ? [path.join(__dirname, "absent-entry.cjs")]
-          : [__filename, "--engine", scenario.name],
+          : [
+              __filename,
+              "--engine",
+              scenario.name,
+              ...(auditFile ? [auditFile] : []),
+            ],
         options,
       )
-      if (scenario.parentLoss) {
+      if (scenario.parentLoss || scenario.selfDisposal) {
         originalKill = owned.kill.bind(owned)
         owned.kill = () => false
         emergencyTimer = setTimeout(() => {
@@ -520,6 +569,17 @@ async function caller() {
         if (event === "exit" && scenario.delayedExit) {
           setTimeout(() => emit.call(this, event, ...values), 600)
           return true
+        }
+        if (
+          scenario.callerDeath &&
+          event === "message" &&
+          values[0]?.type === "result"
+        ) {
+          audit("result", {
+            outcome: values[0].outcome,
+            failures: values[0].failures,
+          })
+          if (scenario.callerDeath === "result") return true
         }
         if (event === "message" && values[0]?.audit) {
           const kind = values[0].audit
@@ -723,8 +783,130 @@ async function caller() {
   }
 }
 
+async function observeCallerDeath(entry) {
+  const directory = fs.mkdtempSync(
+    path.join(
+      process.env.PAPERCLIP_RUN_SCRATCH_DIR ??
+        process.env.PAPERCLIP_SCRATCH_DIR ??
+        process.env.TMPDIR,
+      "caller-loss-",
+    ),
+  )
+  const file = path.join(directory, "audit.jsonl")
+  const child = childProcess.spawn(
+    process.execPath,
+    [__filename, "--caller", entry.name, file],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  )
+  let stderr = "",
+    killedAt,
+    recoveryPid,
+    endedAt,
+    watchdog = false
+  const exit = new Promise((resolve) =>
+    child.once("close", (code, signal) => resolve({ code, signal })),
+  )
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk
+  })
+  const read = () =>
+    fs.existsSync(file)
+      ? fs
+          .readFileSync(file, "utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map(JSON.parse)
+      : []
+  // An orphan is no longer our ChildProcess; Linux exposes termination independently.
+  const terminated = (pid) => {
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8")
+      return ["Z", "X"].includes(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0],
+      )
+    } catch (error) {
+      if (error.code === "ENOENT") return true
+      throw error
+    }
+  }
+  try {
+    const until = Date.now() + 5000
+    while (Date.now() < until) {
+      const events = read()
+      recoveryPid = events.find((event) => event.event === "child-start")?.pid
+      if (
+        !killedAt &&
+        events.some((event) => event.event === entry.callerDeath)
+      ) {
+        killedAt = Date.now()
+        child.kill("SIGKILL")
+      }
+      if (killedAt && recoveryPid && terminated(recoveryPid)) {
+        endedAt = Date.now()
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+    if (!endedAt) {
+      watchdog = true
+      if (recoveryPid) process.kill(recoveryPid, "SIGKILL")
+      child.kill("SIGKILL")
+    }
+    assert.equal(watchdog, false, "Recovery child did not self-dispose")
+    assert.deepEqual(await exit, { code: null, signal: "SIGKILL" })
+    const events = read()
+    assert.equal(stderr, "")
+    assert.equal(
+      events.filter((event) => event.event === "acquisition").length,
+      1,
+    )
+    assert.equal(events.filter((event) => event.event === "settled").length, 0)
+    assert.equal(events.filter((event) => event.event === "query").length, 0)
+    assert.equal(
+      events.filter((event) => event.event === "self-disposal").length,
+      1,
+    )
+    assert.ok(events.some((event) => event.event === "disconnect"))
+    assert.ok(
+      endedAt <=
+        Math.min(
+          ...events
+            .filter((event) => event.event === "ceiling")
+            .map((event) => event.until),
+        ) +
+          40,
+    )
+    assert.ok(endedAt - killedAt < 400)
+    const result = events.find((event) => event.event === "result")
+    assert.equal(result.outcome, "not-attempted")
+    assert.equal(result.failures[0].code, "DEADLINE_EXCEEDED")
+    console.log(
+      JSON.stringify({
+        name: entry.name,
+        passed: true,
+        intentionalCallerDeath: true,
+        childSelfDisposal: true,
+        disposalMs: endedAt - killedAt,
+        watchdog: false,
+      }),
+    )
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL")
+      await exit
+    }
+    if (recoveryPid && !terminated(recoveryPid))
+      process.kill(recoveryPid, "SIGKILL")
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
 async function main() {
   for (const entry of scenarios) {
+    if (entry.callerDeath) {
+      await observeCallerDeath(entry)
+      continue
+    }
     const child = childProcess.spawn(
       process.execPath,
       [__filename, "--caller", entry.name],
