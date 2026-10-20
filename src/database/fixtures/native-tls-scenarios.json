@@ -1,0 +1,4 @@
+[
+  { "name": "trusted DNS TLS", "mutual": false },
+  { "name": "mutual TLS", "mutual": true }
+]

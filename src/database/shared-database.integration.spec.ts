@@ -11,6 +11,7 @@ import {
   SharedDatabaseModule as Database,
   TestDatabaseInfo,
 } from "./index"
+import { createTlsProxy } from "./fixtures/tls-proxy"
 import { FailingSchema1700000000001 } from "./fixtures/failing.migration"
 import { Person, Tag, Note, Entry } from "./fixtures/records.entity"
 
@@ -847,6 +848,51 @@ integration("owned PostgreSQL public boundary", () => {
       }
     }
   }, 30000)
+
+  const nativeTlsScenarios = JSON.parse(
+    readFileSync(join(__dirname, "fixtures/native-tls-scenarios.json"), "utf8"),
+  ) as Array<{ name: string; mutual: boolean }>
+  it.each(nativeTlsScenarios)(
+    "preserves normal TLS setup, lifetime lease and recovery with $name",
+    async ({ mutual }) => {
+      const proxy = await createTlsProxy(recoveryBaseUrl, scratch, mutual)
+      try {
+        const natural = await retainedCreator(proxy.normalUrl)
+        const recover = (input: typeof natural.input) =>
+          freshRecovery({ ...input, base: proxy.base })
+        expect(await recover(natural.input)).toMatchObject({
+          failure: { code: "BUSY", outcome: "not-attempted" },
+        })
+        natural.child.send("clear")
+        expect(await natural.message()).toEqual({ cleared: true })
+        natural.child.send("close")
+        expect(await natural.message()).toEqual({ closed: true })
+        expect(await natural.exit).toEqual({ code: 0, signal: null })
+        expect(await recover(natural.input)).toEqual({
+          result: { status: "already-absent" },
+        })
+        externalDatabases.delete(natural.input.database.databaseName)
+        const retained = await retainedCreator(proxy.normalUrl)
+        await stopCreator(retained)
+        expect(await recover(retained.input)).toEqual({
+          result: { status: "removed" },
+        })
+        await absent(retained.input.database.databaseName)
+        expect(await recover(retained.input)).toEqual({
+          result: { status: "already-absent" },
+        })
+        externalDatabases.delete(retained.input.database.databaseName)
+        expect(proxy.report().secureConnections).toBeGreaterThan(4)
+        if (mutual)
+          expect(proxy.report().verifiedClients).toBe(
+            proxy.report().secureConnections,
+          )
+      } finally {
+        await proxy.close()
+      }
+    },
+    60000,
+  )
 
   const nativeFaultScenarios = JSON.parse(
     readFileSync(
