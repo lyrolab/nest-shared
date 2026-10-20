@@ -31,3 +31,9 @@
 - [x] 5.3 Push to this same branch/PR, update the feature PR description and mark apply complete, then reassign this same issue to Simplifier with verification and sensitive surfaces. Keep the release-return requirement explicit: Reviewer merges under standing policy and returns the open issue to Founding Engineer in_progress.
 
 Release verification belongs to Founding Engineer after review: verify actual release CI, published npm version, consumer-visible API/declarations/recipe and immutable PR/commit before completing this issue. Route publication failures; extra authority goes to CEO. No predicted version, manual publish, direct main push, new credentials, installed-package patch or consumer implementation belongs here.
+
+## 6. Review fixes
+
+- [ ] 6.1 Contextually type the pg configuration and verify npm ci plus build with the actual locked pg types.
+- [ ] 6.2 Include TLS configuration loading in the recovery deadline and cancellation path. Reject special files, close every opened file and prove bounded public API settlement, no late network/query dispatch and natural process exit.
+- [ ] 6.3 Run the affected public API, transport and native checks, update the checkpoint with exact inputs and confirm passing CI on the final head before handoff.

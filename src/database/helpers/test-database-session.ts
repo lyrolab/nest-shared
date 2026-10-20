@@ -28,7 +28,7 @@ async function connectionConfig(
 ): Promise<ClientConfig> {
   const url = new URL(databaseUrl)
   const { constants } = await import("node:fs")
-  const { open } = await import("node:fs/promises")
+  const { open, readFile } = await import("node:fs/promises")
   const readCertificate = async (key: string) => {
     signal?.throwIfAborted()
     // Nonblocking open lets us reject a FIFO without waiting for its writer.
@@ -39,7 +39,7 @@ async function connectionConfig(
     try {
       signal?.throwIfAborted()
       if (!(await file.stat()).isFile()) throw interruption()
-      return await file.readFile({ signal })
+      return await readFile(file, { signal })
     } finally {
       await file.close()
     }

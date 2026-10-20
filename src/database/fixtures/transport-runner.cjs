@@ -134,33 +134,33 @@ async function configurationChild(scenario, port, certificateDir) {
   }
   const files = require("node:fs/promises")
   const originalOpen = files.open
+  const originalRead = files.readFile
   files.open = async (...args) => {
     const file = await originalOpen(...args)
     opened++
-    const originalRead = file.readFile.bind(file)
     const originalClose = file.close.bind(file)
     file.close = async () => {
       await originalClose()
       closed++
     }
-    if (scenario.file === "regular") {
-      file.readFile = async ({ signal }) => {
-        reads++
-        if (scenario.mode === "cancel")
-          abortTimer = setTimeout(() => controller.abort(), 20)
-        try {
-          // Hold this public file operation until interruption reaches it.
-          if (!signal.aborted)
-            await new Promise((resolve) =>
-              signal.addEventListener("abort", resolve, { once: true }),
-            )
-          return await originalRead({ signal })
-        } finally {
-          settledReads++
-        }
+    return file
+  }
+  if (scenario.file === "regular") {
+    files.readFile = async (file, { signal }) => {
+      reads++
+      if (scenario.mode === "cancel")
+        abortTimer = setTimeout(() => controller.abort(), 20)
+      try {
+        // Hold this public file operation until interruption reaches it.
+        if (!signal.aborted)
+          await new Promise((resolve) =>
+            signal.addEventListener("abort", resolve, { once: true }),
+          )
+        return await originalRead(file, { signal })
+      } finally {
+        settledReads++
       }
     }
-    return file
   }
   const url = new URL(`postgres://probe:probe@127.0.0.1:${port}/probe`)
   url.searchParams.set("sslmode", "verify-full")
@@ -177,6 +177,8 @@ async function configurationChild(scenario, port, certificateDir) {
   const database = Database.getTestDatabaseInfo(config)
   const started = performance.now()
   let failure
+  if (scenario.mode === "cancel" && scenario.file !== "regular")
+    abortTimer = setTimeout(() => controller.abort(), 20)
   try {
     await recoverTestDatabase({
       base: { databaseUrl: url.toString(), expectedRole: "probe" },
@@ -234,6 +236,7 @@ async function probe(scenario, certificateDir) {
   let queries = 0
   let secure = false
   let phaseSent = false
+  let connections = 0
   const phase = () => {
     if (!phaseSent && childProcess.connected) {
       phaseSent = true
@@ -241,6 +244,7 @@ async function probe(scenario, certificateDir) {
     }
   }
   function track(socket) {
+    connections++
     peers.add(socket)
     socket.on("error", () => {})
     socket.on("close", () => peers.delete(socket))
@@ -342,7 +346,7 @@ async function probe(scenario, certificateDir) {
     assert.equal(report.closed, true)
     assert.ok(report.closeMs < closeBudgetMs)
     assert.equal(queries, scenario.phase === "active" ? 1 : 0)
-    if (scenario.phase === "configuration") assert.equal(peers.size, 0)
+    if (scenario.phase === "configuration") assert.equal(connections, 0)
     if (
       scenario.tls &&
       ["idle", "active", "startup"].includes(scenario.phase)
