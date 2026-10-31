@@ -73,6 +73,16 @@
       "import": "./dist/eslint/index.js",
       "require": "./dist/eslint/index.js"
     },
+    "./oxlint": {
+      "types": "./dist/oxlint/index.d.ts",
+      "import": "./dist/oxlint/index.js",
+      "require": "./dist/oxlint/index.js"
+    },
+    "./oxfmt": {
+      "types": "./dist/oxfmt/index.d.ts",
+      "import": "./dist/oxfmt/index.js",
+      "require": "./dist/oxfmt/index.js"
+    },
     "./casl": {
       "types": "./dist/casl/index.d.ts",
       "import": "./dist/casl/index.js",
@@ -138,6 +148,7 @@
     "class-transformer": "^0.5.0",
     "class-validator": "^0.14.0 || ^0.15.0",
     "nest-casl": "^1.9.0",
+    "oxlint": ">=1.90.0 <2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.22",
     "zod": "^4.1.13",
@@ -184,6 +195,9 @@
       "optional": true
     },
     "nest-casl": {
+      "optional": true
+    },
+    "oxlint": {
       "optional": true
     },
     "pg": {
