@@ -120,21 +120,21 @@ expect(memory.objects.get("files/1")?.contentType).toBe("image/webp")
 | `forcePathStyle`  | `boolean` |    —     | Addresses objects as `endpoint/bucket/key`, which most S3-compatible servers need   |
 | `keyPrefix`       | `string`  |    —     | Every key is stored as `<keyPrefix>/<key>`; a trailing `/` is ignored               |
 
-Keys are non-empty strings that do not start with `/`; any other key throws `InvalidStorageKeyError`.
+Keys are non-empty strings that do not start with `/` and have no `.` or `..` segment; any other key throws `InvalidStorageKeyError`.
 
 On AWS S3, grant the credentials `s3:ListBucket` on the bucket besides `s3:GetObject`, `s3:PutObject` and `s3:DeleteObject`: without it S3 answers a missing key with 403 instead of 404, and `get` and `exists` throw instead of reporting it missing.
 
 ## Key Exports
 
-| Export                   | Type           | Description                                                        |
-| ------------------------ | -------------- | ------------------------------------------------------------------ |
-| `SharedStorageModule`    | class          | Dynamic module with `forRoot()` / `forRootAsync()` / `forTest()`   |
-| `StorageService`         | abstract class | The port and its injection token: `put`, `get`, `delete`, `exists` |
-| `InMemoryStorageService` | class          | In-memory implementation provided by `forTest()`                   |
-| `StoredObject`           | interface      | `{ body; contentType; contentLength; lastModified?; etag? }`       |
-| `StorageOptions`         | interface      | Module options                                                     |
-| `InvalidStorageKeyError` | class          | Thrown for an empty key or one starting with `/`                   |
-| `STORAGE_OPTIONS`        | token          | Injection token for the options                                    |
+| Export                   | Type           | Description                                                                       |
+| ------------------------ | -------------- | --------------------------------------------------------------------------------- |
+| `SharedStorageModule`    | class          | Dynamic module with `forRoot()` / `forRootAsync()` / `forTest()`                  |
+| `StorageService`         | abstract class | The port and its injection token: `put`, `get`, `delete`, `exists`                |
+| `InMemoryStorageService` | class          | In-memory implementation provided by `forTest()`                                  |
+| `StoredObject`           | interface      | `{ body; contentType; contentLength; lastModified?; etag? }`                      |
+| `StorageOptions`         | interface      | Module options                                                                    |
+| `InvalidStorageKeyError` | class          | Thrown for an empty key, one starting with `/`, or one with a `.` or `..` segment |
+| `STORAGE_OPTIONS`        | token          | Injection token for the options                                                   |
 
 ## Development
 

@@ -102,6 +102,9 @@ export class KeycloakAdminStubService implements KeycloakAdminOperations {
       }
       if (username !== undefined) user.username = username
       if (email !== undefined) user.email = email
+      for (const field of ["email", "firstName", "lastName"] as const) {
+        if (user[field] === "") delete user[field]
+      }
       if (attributes) {
         for (const [name, values] of Object.entries(attributes)) {
           if (values.length === 0) delete user.attributes[name]
@@ -130,7 +133,15 @@ export class KeycloakAdminStubService implements KeycloakAdminOperations {
       options: { ...options },
     })
     return this.run(() => {
-      if (!this.existingUser(userId).email) {
+      const user = this.existingUser(userId)
+      if (!user.enabled) {
+        throw new KeycloakUserValidationError(
+          userId,
+          undefined,
+          "User is disabled",
+        )
+      }
+      if (!user.email) {
         throw new KeycloakUserValidationError(
           userId,
           undefined,

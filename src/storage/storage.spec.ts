@@ -217,16 +217,19 @@ describe.each(implementations)("StorageService (%s)", (_name, create) => {
     await expect(storage.delete(nextKey())).resolves.toBeUndefined()
   })
 
-  it.each(["", "/images/1"])("rejects the key %p", async (badKey) => {
-    for (const run of [
-      () => storage.put(badKey, "x", { contentType: "text/plain" }),
-      () => storage.get(badKey),
-      () => storage.delete(badKey),
-      () => storage.exists(badKey),
-    ]) {
-      await expect(run()).rejects.toBeInstanceOf(InvalidStorageKeyError)
-    }
-  })
+  it.each(["", "/images/1", ".", "./dot", "a/../x", "../env-b/key", "a/.."])(
+    "rejects the key %p",
+    async (badKey) => {
+      for (const run of [
+        () => storage.put(badKey, "x", { contentType: "text/plain" }),
+        () => storage.get(badKey),
+        () => storage.delete(badKey),
+        () => storage.exists(badKey),
+      ]) {
+        await expect(run()).rejects.toBeInstanceOf(InvalidStorageKeyError)
+      }
+    },
+  )
 })
 
 describe("S3StorageService key prefix", () => {

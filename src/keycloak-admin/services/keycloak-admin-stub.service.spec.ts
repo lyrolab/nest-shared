@@ -147,6 +147,37 @@ describe("KeycloakAdminStubService", () => {
     })
   })
 
+  it("refuses an actions email to a disabled user", async () => {
+    stub.seedUser({ id: "user-1", email: "olive@example.com", enabled: false })
+
+    await expect(
+      service.executeActionsEmail("user-1", ["VERIFY_EMAIL"]),
+    ).rejects.toMatchObject({
+      name: "KeycloakUserValidationError",
+      errorMessage: "User is disabled",
+    })
+  })
+
+  it("reads cleared email and names as absent", async () => {
+    stub.seedUser({
+      id: "user-1",
+      email: "olive@example.com",
+      firstName: "Olive",
+      lastName: "R",
+    })
+
+    await service.updateUser("user-1", {
+      email: "",
+      firstName: "",
+      lastName: "",
+    })
+
+    const user = await service.getUser("user-1")
+    expect(user.email).toBeUndefined()
+    expect(user.firstName).toBeUndefined()
+    expect(user.lastName).toBeUndefined()
+  })
+
   it("lists seeded credentials", async () => {
     stub.seedUser({
       id: "user-1",

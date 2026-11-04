@@ -268,6 +268,27 @@ describe("KeycloakAdminService against Keycloak", () => {
     })
   })
 
+  it("reads a cleared email as absent and refuses actions email to a disabled user", async () => {
+    const userId = await keycloak.createUser("clearing", {
+      email: "clearing@example.com",
+    })
+    const service = await serviceFor(managerOptions())
+
+    await service.updateUser(userId, { email: "" })
+    expect((await service.getUser(userId)).email).toBeUndefined()
+
+    const disabledId = await keycloak.createUser("disabled", {
+      email: "disabled@example.com",
+      enabled: false,
+    })
+    await expect(
+      service.executeActionsEmail(disabledId, ["VERIFY_EMAIL"]),
+    ).rejects.toMatchObject({
+      name: "KeycloakUserValidationError",
+      errorMessage: "User is disabled",
+    })
+  })
+
   it("reports a taken username and a taken email as typed conflicts", async () => {
     await keycloak.createUser("patb", { email: "patb@example.com" })
     const userId = await keycloak.createUser("renamer", {

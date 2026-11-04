@@ -40,8 +40,15 @@ export abstract class StorageService {
   abstract exists(key: string): Promise<boolean>
 }
 
+// S3-compatible servers backed by a filesystem refuse "." and ".." segments, and
+// they would read as a way out of the key prefix.
 export function assertStorageKey(key: string): void {
-  if (typeof key !== "string" || key === "" || key.startsWith("/")) {
+  if (
+    typeof key !== "string" ||
+    key === "" ||
+    key.startsWith("/") ||
+    key.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
     throw new InvalidStorageKeyError(key)
   }
 }
