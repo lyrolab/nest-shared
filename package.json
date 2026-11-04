@@ -97,6 +97,11 @@
       "types": "./dist/rate-limit/index.d.ts",
       "import": "./dist/rate-limit/index.js",
       "require": "./dist/rate-limit/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js",
+      "require": "./dist/storage/index.js"
     }
   },
   "scripts": {
@@ -121,6 +126,7 @@
     "passport-jwt": "^4.0.1"
   },
   "peerDependencies": {
+    "@aws-sdk/client-s3": "^3.729.0",
     "@ai-sdk/provider": "^4.0.0",
     "@nestjs/bullmq": "^11.0.0",
     "@nestjs/cache-manager": "^3.0.0",
@@ -149,12 +155,15 @@
     "class-validator": "^0.14.0 || ^0.15.0",
     "nest-casl": "^1.9.0",
     "oxlint": ">=1.90.0 <2",
+    "pg": "^8.23.1",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.22",
-    "zod": "^4.1.13",
-    "pg": "^8.23.1"
+    "zod": "^4.1.13"
   },
   "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
     "@ai-sdk/provider": {
       "optional": true
     },
@@ -206,6 +215,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.18",
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
     "@eslint/eslintrc": "^3.2.0",
@@ -241,6 +251,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.2",
     "ai": "^7.0.114",
     "bullmq": "^5.46.1",
@@ -270,8 +281,7 @@
     "typeorm": "^0.3.22",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.20.0",
-    "zod": "^4.3.6",
-    "@types/pg": "^8.20.0"
+    "zod": "^4.3.6"
   },
   "jest": {
     "moduleFileExtensions": [

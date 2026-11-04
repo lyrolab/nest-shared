@@ -100,6 +100,7 @@ describe("createUserProvisioningGuard", () => {
       realmRoles: [],
       clientRoles: {},
       groups: [],
+      claims: {},
     })
     expect(request.dbUser).toEqual({
       id: "local-1",
@@ -141,6 +142,18 @@ describe("createUserProvisioningGuard", () => {
         clientRoles: { portal: ["moderator"] },
         groups: ["/support"],
       }),
+    )
+  })
+
+  it("passes every verified claim through", async () => {
+    const { guard, provisioner } = await buildGuard()
+    const claims = { auth_time: 1793752873, birthdate: "1990-05-06" }
+    const request: TestRequest = { user: { ...userFrom(ISS_A), claims } }
+
+    await guard.canActivate(contextFor(request))
+
+    expect(provisioner.provision).toHaveBeenCalledWith(
+      expect.objectContaining({ claims }),
     )
   })
 

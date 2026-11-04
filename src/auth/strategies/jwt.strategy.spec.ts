@@ -305,6 +305,65 @@ describe("JwtStrategy", () => {
     })
   })
 
+  describe("claims", () => {
+    let strategy: JwtStrategy
+
+    beforeAll(() => {
+      strategy = new JwtStrategy({ jwksUri: jwksA.jwksUri, issuer: ISS_A })
+    })
+
+    it("keeps every verified claim, custom ones included", async () => {
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, {
+          auth_time: 1793752873,
+          birthdate: "1990-05-06",
+          username_display: "Olive.R",
+          preferred_username: "olive.r",
+        }),
+      )
+      expect(outcome).toMatchObject({
+        result: "success",
+        user: {
+          claims: {
+            sub: "user-1",
+            iss: ISS_A,
+            email: "u@example.com",
+            auth_time: 1793752873,
+            birthdate: "1990-05-06",
+            username_display: "Olive.R",
+            preferred_username: "olive.r",
+          },
+        },
+      })
+    })
+
+    it("leaves the existing fields unchanged", async () => {
+      const outcome = await authenticate(
+        strategy,
+        sign(idpA, ISS_A, {
+          preferred_username: "olive.r",
+          realm_access: { roles: ["user"] },
+          groups: ["/staff"],
+          birthdate: "1990-05-06",
+        }),
+      )
+      if (outcome.result !== "success") throw new Error(outcome.result)
+      const { claims, ...fields } = outcome.user as Record<string, unknown>
+      expect(claims).toBeDefined()
+      expect(fields).toEqual({
+        id: "user-1",
+        email: "u@example.com",
+        name: "olive.r",
+        issuer: ISS_A,
+        roles: ["user"],
+        realmRoles: ["user"],
+        clientRoles: {},
+        groups: ["/staff"],
+      })
+    })
+  })
+
   describe("roles", () => {
     const realmAndClientRoles = {
       realm_access: { roles: ["user", "admin"] },

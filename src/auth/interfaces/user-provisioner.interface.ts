@@ -14,6 +14,8 @@ export interface ProvisioningIdentity {
   realmRoles: string[]
   clientRoles: Record<string, string[]>
   groups: string[]
+  /** See `AuthUser.claims`. */
+  claims?: Readonly<Record<string, unknown>>
 }
 
 /**

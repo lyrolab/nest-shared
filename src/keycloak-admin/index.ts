@@ -1,6 +1,7 @@
 export * from "./keycloak-admin.module"
 export * from "./keycloak-admin.constants"
 export * from "./interfaces/keycloak-admin-options.interface"
+export * from "./interfaces/keycloak-user.interface"
 export * from "./errors/keycloak-admin.errors"
 export * from "./services/keycloak-admin.service"
 export * from "./services/keycloak-admin-stub.service"

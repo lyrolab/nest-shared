@@ -106,5 +106,6 @@ function toIdentity(user: AuthUser): ProvisioningIdentity {
     realmRoles: user.realmRoles ?? [],
     clientRoles: user.clientRoles ?? {},
     groups: user.groups ?? [],
+    claims: user.claims ?? {},
   }
 }

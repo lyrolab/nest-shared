@@ -21,5 +21,31 @@ export class KeycloakUserNotFoundError extends KeycloakAdminError {
   }
 }
 
+export type KeycloakUserConflictField = "username" | "email"
+
+/** Another user already has the username or email (HTTP 409). */
+export class KeycloakUserConflictError extends KeycloakAdminError {
+  constructor(
+    readonly userId: string,
+    readonly field: KeycloakUserConflictField,
+  ) {
+    super(`Another Keycloak user has the same ${field}`, 409)
+  }
+}
+
+/** Keycloak's user profile rejected a value (HTTP 400). */
+export class KeycloakUserValidationError extends KeycloakAdminError {
+  constructor(
+    readonly userId: string,
+    readonly field: string | undefined,
+    readonly errorMessage: string | undefined,
+  ) {
+    super(
+      `Keycloak rejected the user${field ? ` ${field}` : ""}: ${errorMessage ?? "invalid value"}`,
+      400,
+    )
+  }
+}
+
 /** Any other failure: unexpected status, network error or timeout. */
 export class KeycloakAdminRequestError extends KeycloakAdminError {}
