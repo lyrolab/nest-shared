@@ -26,4 +26,9 @@ export interface AuthUser {
   realmRoles?: string[]
   clientRoles?: Record<string, string[]>
   groups?: string[]
+  /**
+   * Every claim of the verified token, e.g. `auth_time`, `birthdate` or a custom
+   * mapper's claim. Always set by `JwtStrategy`.
+   */
+  claims?: Readonly<Record<string, unknown>>
 }

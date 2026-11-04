@@ -74,6 +74,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       realmRoles: stringList(payload.realm_access?.roles),
       clientRoles: extractClientRoles(payload),
       groups: stringList(payload.groups),
+      claims: { ...payload } as Record<string, unknown>,
     }
   }
 
