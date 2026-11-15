@@ -9,7 +9,7 @@ The `configureApp()` function takes a `NestExpressApplication` instance and appl
 - **Global ValidationPipe** — with `forbidNonWhitelisted: true` and `whitelist: true` to reject unknown request properties
 - **Global Exception Filter** — `TypeOrmExceptionFilter` for consistent TypeORM error responses
 - **CORS** — origins from `CORS_ORIGINS` (comma-separated), falling back to `FRONTEND_URL`, with `credentials: true`
-- **Shutdown Hooks** — enables graceful shutdown
+- **Shutdown Hooks** — enables graceful shutdown; `shutdownHooks: false` leaves SIGTERM to the app (for a custom drain before `app.close()`)
 - **Swagger UI** — served at `/api` (JSON at `/api-json`)
 
 ## How Do I Use It?
