@@ -156,4 +156,20 @@ describe("configureApp", () => {
       expect(response.body).toEqual({ name: "Ada" })
     })
   })
+
+  describe("shutdown hooks", () => {
+    it("closes the app on SIGTERM by default", async () => {
+      const before = process.listenerCount("SIGTERM")
+      await createApp()
+
+      expect(process.listenerCount("SIGTERM")).toBeGreaterThan(before)
+    })
+
+    it("leaves SIGTERM to the app when disabled", async () => {
+      const before = process.listenerCount("SIGTERM")
+      await createApp({ shutdownHooks: false })
+
+      expect(process.listenerCount("SIGTERM")).toBe(before)
+    })
+  })
 })

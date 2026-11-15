@@ -18,6 +18,11 @@ export type ConfigureAppOptions = {
   cors?: boolean | CorsOptions
   swagger?: boolean | SwaggerSetupOptions
   validationPipe?: ValidationPipeOptions
+  /**
+   * `false` leaves SIGTERM to the application, for apps that drain work
+   * before calling `app.close()` themselves.
+   */
+  shutdownHooks?: boolean
 }
 
 export const configureApp = (
@@ -33,11 +38,13 @@ export const configureApp = (
   )
   app.useGlobalFilters(new TypeOrmExceptionFilter())
 
-  const { cors = true, swagger = true } = options
+  const { cors = true, swagger = true, shutdownHooks = true } = options
   if (cors) {
     configureCors(app, cors === true ? {} : cors)
   }
-  app.enableShutdownHooks()
+  if (shutdownHooks) {
+    app.enableShutdownHooks()
+  }
 
   if (swagger) {
     configureSwagger(app, swagger === true ? {} : swagger)
