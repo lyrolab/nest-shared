@@ -239,7 +239,13 @@ describe("createQueueProcessor", () => {
       expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
         JOB_NAME,
         { pattern: "*/5 * * * *" },
-        { name: JOB_NAME },
+        {
+          name: JOB_NAME,
+          opts: {
+            removeOnComplete: { count: 100 },
+            removeOnFail: { age: 7 * 24 * 3600 },
+          },
+        },
       )
     })
 
@@ -277,7 +283,13 @@ describe("createQueueProcessor", () => {
       expect(queue.upsertJobScheduler).toHaveBeenCalledWith(
         JOB_NAME,
         { pattern: "*/5 * * * *" },
-        { name: JOB_NAME },
+        {
+          name: JOB_NAME,
+          opts: {
+            removeOnComplete: { count: 100 },
+            removeOnFail: { age: 7 * 24 * 3600 },
+          },
+        },
       )
     })
 

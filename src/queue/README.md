@@ -107,6 +107,8 @@ SharedQueueModule.forRootAsync({
 
 Schedulers are upserted on the job's queue at startup. Stale schedulers are cleaned up when a job's cron pattern changes or when the job moves to another queue; schedulers with names the module does not know are left untouched.
 
+Each cron run keeps its last 100 completed jobs and its failed jobs for 7 days; older runs are removed from Redis so a frequent schedule does not grow memory without bound.
+
 ## Telemetry
 
 Pass any implementation of BullMQ's native `Telemetry` interface (e.g. [`bullmq-otel`](https://www.npmjs.com/package/bullmq-otel)); it is threaded into every queue and worker the module creates, giving distributed traces with producer→consumer context propagation:
