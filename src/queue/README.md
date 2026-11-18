@@ -107,7 +107,7 @@ SharedQueueModule.forRootAsync({
 
 Schedulers are upserted on the job's queue at startup. Stale schedulers are cleaned up when a job's cron pattern changes or when the job moves to another queue; schedulers with names the module does not know are left untouched.
 
-Each cron run keeps its last 100 completed jobs and its failed jobs for 7 days; older runs are removed from Redis so a frequent schedule does not grow memory without bound.
+Cron runs are created with `removeOnComplete: { count: 100 }` and `removeOnFail: { age: 7 days, count: 1000 }`, so a frequent schedule does not grow Redis memory without bound. BullMQ applies these limits to the queue's whole completed and failed sets when a cron run finishes, so they also trim older non-cron jobs on the same queue.
 
 ## Telemetry
 

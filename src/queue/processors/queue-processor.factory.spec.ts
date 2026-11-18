@@ -243,7 +243,7 @@ describe("createQueueProcessor", () => {
           name: JOB_NAME,
           opts: {
             removeOnComplete: { count: 100 },
-            removeOnFail: { age: 7 * 24 * 3600 },
+            removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
           },
         },
       )
@@ -287,7 +287,7 @@ describe("createQueueProcessor", () => {
           name: JOB_NAME,
           opts: {
             removeOnComplete: { count: 100 },
-            removeOnFail: { age: 7 * 24 * 3600 },
+            removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
           },
         },
       )
