@@ -1,7 +1,12 @@
 import { WorkerHost } from "@nestjs/bullmq"
 import { OnModuleInit } from "@nestjs/common"
-import { DelayedError, Job, Queue } from "bullmq"
+import { DelayedError, Job, JobsOptions, Queue } from "bullmq"
 import { JobRegistryService } from "../services/job-registry.service"
+
+const CRON_JOB_RETENTION: JobsOptions = {
+  removeOnComplete: { count: 100 },
+  removeOnFail: { age: 7 * 24 * 3600, count: 1000 },
+}
 
 export abstract class BaseQueueProcessor
   extends WorkerHost
@@ -59,7 +64,11 @@ export abstract class BaseQueueProcessor
 
     await Promise.all(
       ownCronJobs.map(({ name, cron }) =>
-        this.queue.upsertJobScheduler(name, { pattern: cron }, { name }),
+        this.queue.upsertJobScheduler(
+          name,
+          { pattern: cron },
+          { name, opts: CRON_JOB_RETENTION },
+        ),
       ),
     )
   }
